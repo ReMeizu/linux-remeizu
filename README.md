@@ -9,16 +9,22 @@ installable Android ROM or a GKI compatibility guarantee.
 
 | Component | Source status | Validation |
 | --- | --- | --- |
-| MT6735 / MT6735M GPIO, pinmux and EINT | Added through the upstream Paris pinctrl core | ARM64 objects compile; pull-table bounds checked |
-| MT6755 GPIO and pinmux | Added; vendor register reconciliation in progress | ARM64 object compiles; board validation pending |
-| MT6735 clocks | Existing upstream drivers | Included in the common configuration |
-| MT6797 and MSM8953 support | Existing upstream drivers | Meizu board integration pending |
+| MT6735 / MT6735M GPIO, pinmux and EINT | Added through the upstream Paris pinctrl core | Full ARM64 Image links; MT6735 register fields and pull-table bounds checked |
+| MT6755 GPIO and pinmux | Added with vendor register corrections | Full ARM64 Image links; board validation pending |
+| MT6735 / MT6797 clocks | Existing upstream drivers | Driver symbols verified in the common Image |
+| MT6797 and MSM8953 pinctrl | Existing upstream drivers | Linked into the common Image; Meizu board integration pending |
 | MT6750, MT6737, MT6753 and MT6752 variants | Planned stock-backed SoC descriptions | No compatibility alias assumed |
 | Display, storage, charging, modem, cameras and suspend | Board integration pending | No hardware acceptance claimed |
 
 The intended layout is one kernel source and shared SoC drivers, with a
 separate device tree for each board. M681 and L681 target the same compiled
 kernel core while retaining their different peripherals and board data.
+
+The latest complete compile check used GCC 9.4 and source commit
+[`9a1fe1954`](https://github.com/ReMeizu/linux-remeizu/commit/9a1fe1954a161d15ebdbfc530aeaba73f28e393e)
+on 2026-09-29. It verified the ARM64 ELF, linked driver symbols and three
+upstream reference DTBs. MT6755 GPIO32 receive-delay configuration and drive
+strength in milliamps remain unsupported pending resolution of vendor data.
 
 For an ARM64 cross-compilation check with GCC and the usual kernel build
 dependencies installed:
