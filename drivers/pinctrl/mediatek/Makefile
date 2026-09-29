@@ -8,6 +8,8 @@ obj-$(CONFIG_PINCTRL_MTK_MOORE)		+= pinctrl-moore.o
 obj-$(CONFIG_PINCTRL_MTK_PARIS)		+= pinctrl-paris.o
 
 # SoC Drivers
+obj-$(CONFIG_PINCTRL_MT6735)		+= pinctrl-mt6735.o
+obj-$(CONFIG_PINCTRL_MT6755)		+= pinctrl-mt6755.o
 obj-$(CONFIG_PINCTRL_AIROHA)		+= pinctrl-airoha.o
 obj-$(CONFIG_PINCTRL_MT7620)		+= pinctrl-mt7620.o
 obj-$(CONFIG_PINCTRL_MT7621)		+= pinctrl-mt7621.o
