@@ -3,6 +3,7 @@
  * Copyright (c) 2022 Yassine Oudjana <y.oudjana@protonmail.com>
  */
 
+#include <dt-bindings/pinctrl/mt65xx.h>
 #include <linux/build_bug.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -824,6 +825,40 @@ static const unsigned int mt6735_pull_type[] = {
 
 static_assert(ARRAY_SIZE(mt6735_pull_type) == ARRAY_SIZE(mtk_pins_mt6735));
 
+static int mt6735_adv_pull_set(struct mtk_pinctrl *hw,
+			      const struct mtk_pin_desc *desc, bool pullup,
+			      u32 arg)
+{
+	if (arg > 3)
+		return -EINVAL;
+
+	if (desc->number >= ARRAY_SIZE(mt6735_pull_type) ||
+	    desc->drv_n == DRV_FIXED ||
+	    mt6735_pull_type[desc->number] != MTK_PULL_PUPD_R1R0_TYPE)
+		return -ENOTSUPP;
+
+	return mtk_pinconf_bias_set_combo(hw, desc, pullup,
+					 MTK_PUPD_SET_R1R0_00 + arg);
+}
+
+static int mt6735_drive_set(struct mtk_pinctrl *hw,
+			   const struct mtk_pin_desc *desc, u32 arg)
+{
+	if (desc->drv_n == DRV_FIXED || desc->drv_n >= DRV_GRP_MAX)
+		return -ENOTSUPP;
+
+	return mtk_pinconf_drive_set_rev1(hw, desc, arg);
+}
+
+static int mt6735_drive_get(struct mtk_pinctrl *hw,
+			   const struct mtk_pin_desc *desc, int *value)
+{
+	if (desc->drv_n == DRV_FIXED || desc->drv_n >= DRV_GRP_MAX)
+		return -ENOTSUPP;
+
+	return mtk_pinconf_drive_get_rev1(hw, desc, value);
+}
+
 static const char * const mt6735_pinctrl_register_base_names[] = {
 	"gpio", "iocfg0", "iocfg1", "iocfg2", "iocfg3", "iocfg4", "iocfg5"
 };
@@ -848,10 +883,10 @@ static const struct mtk_pin_soc mt6735_data = {
 	.pull_type = mt6735_pull_type,
 	.bias_set_combo = mtk_pinconf_bias_set_combo,
 	.bias_get_combo = mtk_pinconf_bias_get_combo,
-	.drive_set = mtk_pinconf_drive_set_rev1,
-	.drive_get = mtk_pinconf_drive_get_rev1,
+	.drive_set = mt6735_drive_set,
+	.drive_get = mt6735_drive_get,
 	.adv_pull_get = mtk_pinconf_adv_pull_get,
-	.adv_pull_set = mtk_pinconf_adv_pull_set,
+	.adv_pull_set = mt6735_adv_pull_set,
 };
 
 static const struct mtk_pin_soc mt6735m_data = {
@@ -866,10 +901,10 @@ static const struct mtk_pin_soc mt6735m_data = {
 	.nbase_names = ARRAY_SIZE(mt6735_pinctrl_register_base_names),
 	.bias_set_combo = mtk_pinconf_bias_set_combo,
 	.bias_get_combo = mtk_pinconf_bias_get_combo,
-	.drive_set = mtk_pinconf_drive_set_rev1,
-	.drive_get = mtk_pinconf_drive_get_rev1,
+	.drive_set = mt6735_drive_set,
+	.drive_get = mt6735_drive_get,
 	.adv_pull_get = mtk_pinconf_adv_pull_get,
-	.adv_pull_set = mtk_pinconf_adv_pull_set,
+	.adv_pull_set = mt6735_adv_pull_set,
 };
 
 static const struct of_device_id mt6735_pinctrl_match[] = {
