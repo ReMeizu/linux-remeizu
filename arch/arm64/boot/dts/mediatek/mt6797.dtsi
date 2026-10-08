@@ -8,6 +8,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/pinctrl/mt6797-pinfunc.h>
+#include <dt-bindings/power/mt6797-power.h>
 
 / {
 	compatible = "mediatek,mt6797";
@@ -433,6 +434,37 @@
 		clock-div = <10>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	mmc0: mmc@11230000 {
+		compatible = "mediatek,mt6797-mmc";
+		reg = <0 0x11230000 0 0x10000>;
+		interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&topckgen CLK_TOP_MUX_MSDC50_0>,
+			 <&topckgen CLK_TOP_MUX_MSDC50_0_HCLK>,
+			 <&infrasys CLK_INFRA_MSDC0>;
+		clock-names = "source", "hclk", "source_cg";
+		status = "disabled";
+	};
+
+	afe: audio-controller@11220000 {
+		compatible = "mediatek,mt6797-audio";
+		reg = <0 0x11220000 0 0x1000>;
+		interrupts = <GIC_SPI 151 IRQ_TYPE_LEVEL_LOW>;
+		power-domains = <&scpsys MT6797_POWER_DOMAIN_AUDIO>;
+		clocks = <&infrasys CLK_INFRA_AUDIO>,
+			 <&infrasys CLK_INFRA_AUDIO_26M>,
+			 <&infrasys CLK_INFRA_AUDIO_26M_PAD_TOP>,
+			 <&topckgen CLK_TOP_MUX_AUDIO>,
+			 <&topckgen CLK_TOP_MUX_AUD_INTBUS>,
+			 <&topckgen CLK_TOP_SYSPLL3_D4>,
+			 <&topckgen CLK_TOP_SYSPLL1_D4>,
+			 <&clk26m>;
+		clock-names = "infra_sys_audio_clk", "infra_sys_audio_26m",
+			      "mtkaif_26m_clk", "top_mux_audio",
+			      "top_mux_aud_intbus", "top_sys_pll3_d4",
+			      "top_sys_pll1_d4", "top_clk26m_clk";
 		status = "disabled";
 	};
 

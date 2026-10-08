@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+#include "mt6797.dtsi"
+
+/ {
+	model = "Meizu MX6";
+	compatible = "meizu,mx6", "mediatek,mt6797";
+	chassis-type = "handset";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	/* LK must provide the actual DRAM and reserved-memory layout. */
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_mx6_pins>;
+	status = "okay";
+};
+
+&pio {
+	uart0_mx6_pins: uart0-mx6-pins {
+		pins-bus {
+			pinmux = <MT6797_GPIO97__FUNC_URXD0>,
+				 <MT6797_GPIO98__FUNC_UTXD0>;
+		};
+	};
+
+	emmc_mx6_pins: emmc-mx6-pins {
+		pins-bus {
+			pinmux = <MT6797_GPIO114__FUNC_MSDC0_DAT0>,
+				 <MT6797_GPIO115__FUNC_MSDC0_DAT1>,
+				 <MT6797_GPIO116__FUNC_MSDC0_DAT2>,
+				 <MT6797_GPIO117__FUNC_MSDC0_DAT3>,
+				 <MT6797_GPIO118__FUNC_MSDC0_DAT4>,
+				 <MT6797_GPIO119__FUNC_MSDC0_DAT5>,
+				 <MT6797_GPIO120__FUNC_MSDC0_DAT6>,
+				 <MT6797_GPIO121__FUNC_MSDC0_DAT7>,
+				 <MT6797_GPIO122__FUNC_MSDC0_CMD>,
+				 <MT6797_GPIO123__FUNC_MSDC0_CLK>,
+				 <MT6797_GPIO124__FUNC_MSDC0_DSL>,
+				 <MT6797_GPIO125__FUNC_MSDC0_RSTB>;
+		};
+	};
+};
+
+&mmc0 {
+	bus-width = <8>;
+	non-removable;
+	no-sd;
+	no-sdio;
+	pinctrl-names = "default", "state_uhs";
+	pinctrl-0 = <&emmc_mx6_pins>;
+	pinctrl-1 = <&emmc_mx6_pins>;
+
+	/* VEMC/IO supplies and pad configuration require the MT6351 port. */
+	status = "disabled";
+};

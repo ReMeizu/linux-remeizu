@@ -70,6 +70,7 @@ properties:
           - enum:
               - archermind,mt6797-x20-dev
               - mediatek,mt6797-evb
+              - meizu,mx6
           - const: mediatek,mt6797
       - items:
           - enum:
