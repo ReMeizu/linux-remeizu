@@ -890,6 +890,13 @@ config REGULATOR_MT6323
 	  This driver supports the control of different power rails of device
 	  through regulator interface.
 
+config REGULATOR_MT6328
+	tristate "MediaTek MT6328 PMIC"
+	depends on MFD_MT6397
+	help
+	  Enable the regulator driver for the buck and LDO supplies of
+	  the MediaTek MT6328 PMIC.
+
 config REGULATOR_MT6331
 	tristate "MediaTek MT6331 PMIC"
 	depends on MFD_MT6397
