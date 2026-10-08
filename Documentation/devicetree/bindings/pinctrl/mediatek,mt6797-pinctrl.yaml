@@ -14,8 +14,9 @@ description: |
   The internal PMIC signal occupies EINT176 and has no physical GPIO
   register. Interrupt specifiers use EINT numbers, not the vendor BSP's
   translated GPIO numbers. The driver currently supports GPIO direction,
-  level, function muxing and EINT; electrical pad controls need separate
-  register descriptions.
+  level, function muxing, EINT, input buffers, Schmitt triggers, pull
+  resistors and TDSEL/RDSEL pad delays. Drive-current conversion is not
+  yet described.
 
 properties:
   compatible:
@@ -63,6 +64,17 @@ patternProperties:
         properties:
           pinmux:
             $ref: /schemas/types.yaml#/definitions/uint32-array
+          input-enable: true
+          input-disable: true
+          input-schmitt-enable: true
+          input-schmitt-disable: true
+          bias-disable: true
+          bias-pull-up: true
+          bias-pull-down: true
+          mediatek,tdsel:
+            $ref: /schemas/types.yaml#/definitions/uint32
+          mediatek,rdsel:
+            $ref: /schemas/types.yaml#/definitions/uint32
         required:
           - pinmux
 
