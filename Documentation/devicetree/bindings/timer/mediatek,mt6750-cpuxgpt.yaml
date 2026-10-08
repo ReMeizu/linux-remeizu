@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/timer/mediatek,mt6750-cpuxgpt.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6750 Secure CPUXGPT System Counter
+
+maintainers:
+  - Matthias Brugger <matthias.bgg@gmail.com>
+
+description: |
+  The CPUXGPT feeds the ARM architected system counter. The MCUSYS register
+  window contains data and index words at offsets 0 and 4. Writes require the
+  legacy MediaTek MCUSYS SiP SMC32 service 0x82000201, including index selection
+  before an MMIO data read. The input clock is 26 MHz and the counter runs at
+  13 MHz. ARM architected timer PPIs provide clock events; CPUXGPT comparator
+  interrupts are not used by this driver.
+
+properties:
+  compatible:
+    const: mediatek,mt6750-cpuxgpt
+
+  reg:
+    maxItems: 1
+    description: Eight-byte CPUXGPT data/index window in MCUSYS.
+
+  clocks:
+    maxItems: 1
+    description: 26 MHz input clock.
+
+required:
+  - compatible
+  - reg
+  - clocks
+
+additionalProperties: false

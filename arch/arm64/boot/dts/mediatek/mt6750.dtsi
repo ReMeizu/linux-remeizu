@@ -90,6 +90,12 @@
 		#clock-cells = <0>;
 	};
 
+	cpuxgpt: timer@10200670 {
+		compatible = "mediatek,mt6750-cpuxgpt";
+		reg = <0 0x10200670 0 8>;
+		clocks = <&clk26m>;
+	};
+
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupt-parent = <&gic>;
