@@ -4,6 +4,7 @@
  * Author: Mars.C <mars.cheng@mediatek.com>
  */
 
+#include <dt-bindings/clock/mediatek,mt6755-clk.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
@@ -79,7 +80,7 @@
 		};
 	};
 
-	uart_clk: dummy26m {
+	clk26m: uart_clk: clock-26m {
 		compatible = "fixed-clock";
 		clock-frequency = <26000000>;
 		#clock-cells = <0>;
@@ -98,10 +99,52 @@
 			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
 	};
 
+	topckgen: clock-controller@10000000 {
+		compatible = "mediatek,mt6755-topckgen", "syscon";
+		reg = <0 0x10000000 0 0x1000>;
+		#clock-cells = <1>;
+	};
+
+	infrasys: clock-controller@10001000 {
+		compatible = "mediatek,mt6755-infrasys", "syscon";
+		reg = <0 0x10001000 0 0x1000>;
+		#clock-cells = <1>;
+	};
+
+	apmixedsys: clock-controller@1000c000 {
+		compatible = "mediatek,mt6755-apmixedsys";
+		reg = <0 0x1000c000 0 0x1000>;
+		clocks = <&clk26m>;
+		clock-names = "clk26m";
+		#clock-cells = <1>;
+	};
+
+	pio: pinctrl@10005000 {
+		compatible = "mediatek,mt6755-pinctrl";
+		reg = <0 0x10005000 0 0x1000>,
+		      <0 0x10002000 0 0x200>,
+		      <0 0x10002200 0 0x200>,
+		      <0 0x10002400 0 0x200>,
+		      <0 0x10002600 0 0x200>,
+		      <0 0x10002800 0 0x200>,
+		      <0 0x10002a00 0 0x200>,
+		      <0 0x1000b000 0 0x1000>;
+		reg-names = "gpio", "iocfg0", "iocfg1", "iocfg2",
+			    "iocfg3", "iocfg4", "iocfg5", "eint";
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-ranges = <&pio 0 0 190>;
+		interrupt-controller;
+		#address-cells = <0>;
+		#interrupt-cells = <2>;
+		interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
 	sysirq: interrupt-controller@10200620 {
 		compatible = "mediatek,mt6755-sysirq",
 			     "mediatek,mt6577-sysirq";
 		interrupt-controller;
+		#address-cells = <0>;
 		#interrupt-cells = <3>;
 		interrupt-parent = <&gic>;
 		reg = <0 0x10200620 0 0x20>;
@@ -112,6 +155,7 @@
 		#interrupt-cells = <3>;
 		interrupt-parent = <&gic>;
 		interrupt-controller;
+		#address-cells = <0>;
 		reg = <0 0x10231000 0 0x1000>,
 		      <0 0x10232000 0 0x2000>,
 		      <0 0x10234000 0 0x2000>,
@@ -123,7 +167,9 @@
 			     "mediatek,mt6577-uart";
 		reg = <0 0x11002000 0 0x400>;
 		interrupts = <GIC_SPI 91 IRQ_TYPE_LEVEL_LOW>;
-		clocks = <&uart_clk>;
+		clocks = <&topckgen CLK_TOP_MUX_UART>,
+			 <&infrasys CLK_INFRA_UART0>;
+		clock-names = "baud", "bus";
 		status = "disabled";
 	};
 
@@ -132,7 +178,9 @@
 			     "mediatek,mt6577-uart";
 		reg = <0 0x11003000 0 0x400>;
 		interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_LOW>;
-		clocks = <&uart_clk>;
+		clocks = <&topckgen CLK_TOP_MUX_UART>,
+			 <&infrasys CLK_INFRA_UART1>;
+		clock-names = "baud", "bus";
 		status = "disabled";
 	};
 };

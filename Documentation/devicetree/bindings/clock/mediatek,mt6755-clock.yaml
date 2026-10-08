@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt6755-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6755 Clock Controllers
+
+maintainers:
+  - Arseniy Velikanov <adomerlee@gmail.com>
+
+description: |
+  MT6755 top clock multiplexers, infrastructure gates and mixed-signal PLLs.
+  The mixed-signal provider currently reads boot firmware PLL configuration;
+  PLL rate and power transitions require separate FHCTL support.
+
+properties:
+  compatible:
+    oneOf:
+      - const: mediatek,mt6755-apmixedsys
+      - items:
+          - enum:
+              - mediatek,mt6755-infrasys
+              - mediatek,mt6755-topckgen
+          - const: syscon
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    const: clk26m
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: mediatek,mt6755-apmixedsys
+    then:
+      required:
+        - clocks
+        - clock-names
+    else:
+      properties:
+        clocks: false
+        clock-names: false
+
+additionalProperties: false

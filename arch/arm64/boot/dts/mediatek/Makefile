@@ -114,3 +114,6 @@ DTC_FLAGS_mt7986a-bananapi-bpi-r3-mini := -@
 DTC_FLAGS_mt7988a-bananapi-bpi-r4 := -@
 DTC_FLAGS_mt7988a-bananapi-bpi-r4-2g5 := -@
 DTC_FLAGS_mt8395-radxa-nio-12l := -@
+
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt6755-meizu-m681.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt6755-meizu-l681.dtb

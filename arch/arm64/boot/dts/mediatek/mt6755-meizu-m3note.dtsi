@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+#include "mt6755.dtsi"
+
+/ {
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
