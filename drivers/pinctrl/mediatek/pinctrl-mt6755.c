@@ -820,11 +820,17 @@ static const char * const mt6755_pinctrl_register_base_names[] = {
 	"gpio", "iocfg0", "iocfg1", "iocfg2", "iocfg3", "iocfg4", "iocfg5"
 };
 
+/* MT6750/MT6755 EIC encodings: 4, 8, 16, 32, 512, ... 32768 cycles at 32 kHz. */
+static const unsigned int mt6755_debounce_time[] = {
+	128, 256, 512, 1024, 16384, 32768, 65536, 131072, 262144, 524288, 0,
+};
+
 static const struct mtk_eint_hw mt6755_eint_hw = {
 	.port_mask = 7,
-	.ports     = 6,
-	.ap_num    = 224,
+	.ports     = 5,
+	.ap_num    = 160,
 	.db_cnt    = 16,
+	.db_time   = mt6755_debounce_time,
 };
 
 static const struct mtk_pin_soc mt6755_data = {
@@ -846,6 +852,7 @@ static const struct mtk_pin_soc mt6755_data = {
 };
 
 static const struct of_device_id mt6755_pinctrl_match[] = {
+	{ .compatible = "mediatek,mt6750-pinctrl", .data = &mt6755_data },
 	{ .compatible = "mediatek,mt6755-pinctrl", .data = &mt6755_data },
 	{ /* sentinel */ }
 };

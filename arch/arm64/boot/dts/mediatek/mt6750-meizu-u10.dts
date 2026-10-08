@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+
+#include "mt6750.dtsi"
+#include <dt-bindings/pinctrl/mt65xx.h>
+
+/ {
+	model = "Meizu U10";
+	chassis-type = "handset";
+	compatible = "meizu,u10", "mediatek,mt6750";
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		ram_console: ram-console@44400000 {
+			reg = <0 0x44400000 0 0x10000>;
+		};
+
+		pstore: pstore@44410000 {
+			reg = <0 0x44410000 0 0xe0000>;
+		};
+
+		minidump: minidump@444f0000 {
+			reg = <0 0x444f0000 0 0x10000>;
+		};
+
+		atf: atf@44600000 {
+			reg = <0 0x44600000 0 0x40000>;
+			no-map;
+		};
+
+		preloader: preloader@44800000 {
+			reg = <0 0x44800000 0 0x100000>;
+		};
+
+		lk: lk@46000000 {
+			reg = <0 0x46000000 0 0x400000>;
+		};
+	};
+};
+
+&pio {
+	uart0_pins: uart0-pins {
+		pins {
+			pinmux = <(MTK_PIN_NO(105) | 1)>,
+				 <(MTK_PIN_NO(106) | 1)>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
+	status = "okay";
+};
