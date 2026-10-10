@@ -52,3 +52,20 @@ launched farm worker has no registered station build ID. Direct native-source
 fallback is explicit; do not attribute the fix to station auto-fix or another
 build's logs. Actual kernel compilation remains the acceptance gate, replacing
 the earlier stub-only type context with real kernel headers.
+
+## R2 native and independent verification PASS
+
+FACT: the frozen code at995de406b6bc5cfa61de9918726f4b15b8756c65 completed
+all configuration, six actual ARM64 driver objects and full Image/dtbs builds
+with native RC0 on GCC14.2. Elapsed553.7s including preparation. Independent
+verification rehashed13artifact paths and26source files, checked ARM64 ELF,
+five linked driver symbols and zero-warning roundtrip for all three DTBs.
+Generated config56273824896ecfc3fe9f33db54ff5482cb3390c067cac088a0039603c91707b5
+is byte-identical to failed R1; only the missing header was corrected.
+Image41474560B/SHA1d866dd6c9966e104e905a2508f2c21f78f26f2426c70d4831eebdac3f1b2565.
+The first R2 SSH launch response was lost; a read-only check recovered actual
+native progress, and the launch was not repeated. Exact verification/source
+receipts remain in cloud_oss_builds/outreach-20261010/platform-mt675x-r2-995de406.
+Package/root report: meizu-fleet/maintenance/builds/CFARM_MT675X_20261010.md.
+No boot.img, hardware acceptance, common-branch merge or publication is claimed.
+This follow-up is documentation only; the built source identity remains995de406.
