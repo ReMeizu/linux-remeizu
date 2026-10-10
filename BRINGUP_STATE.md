@@ -148,3 +148,23 @@ Expected next marker: all23 real objects and full Image link, then actual
 QEMU core ABI tests. Rollback: a different declaration/API requirement or
 unrelated IRQ behavior change blocks promotion. Config/source pins and old
 failed output are retained; next attempt uses a fresh directory/output.
+
+## UAPI export license selection
+
+FACT: native sourceaa140360 compiled/linked all23 real objects, retained all69
+config/value assertions and produced Image/five DTBs. The generic guest's ARM32
+freestanding program compiled; ARM64 userspace compilation correctly demanded
+installed/exported UAPI headers. The real headers_install target then rejected
+ashmem's GPL-containing SPDX expression without Linux-syscall-note.
+
+PROPER-FIX: select Apache-2.0 for the public ashmem header under its existing
+explicit original Apache2-or-GPL2 grant. Preserve the original Google author/
+dual-license notice, all ABI declarations and ioctl values. Do not invent a
+new GPL syscall exception or weaken the export checker. Kernel private driver
+headers retain their original licensing/attribution. This is a metadata-only
+UAPI change; the compiled code identity remainsaa140360 until a new build.
+Expected next marker: standard headers_install sanitizes the public header
+and actual ARM64 userspace builds; actual kernel/guest ABI tests follow.
+Rollback: contradicting original license grant or any changed ABI token blocks
+acceptance. Verification: compare old/new header after comments are removed,
+run real headers_install.sh, then actual exported-header compile and guest.
