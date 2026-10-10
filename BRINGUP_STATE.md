@@ -86,3 +86,44 @@ acceptance. Source presence is not a chip probe or enabled board hardware;
 MX6 eMMC/PWRAP/AFE activation and all component runtime remain pending.
 Verification: immutable merged-source config/object/link/DTB cloud job, then
 source/stock audit and actual hardware evidence at each device's own gate.
+
+## Android core and real legacy ashmem port
+
+PROPER-FIX: the previously compiled defconfig lacked Binder/SELinux and the
+new kernel lacks the ashmem device needed by Android9/legacy vendor userspace.
+A separate remeizu_android.config selects the actual Binder/binderfs devices,
+SELinux dependencies, seccomp/cgroups/BPF, dm-verity and shared-memory heaps.
+Each generated symbol must be checked after olddefconfig, not merely set here.
+The M5c fragment's nonexistent MTK_WATCHDOG spelling is corrected to actual
+MEDIATEK_WATCHDOG, proven by the real watchdog Kconfig.
+
+The real ashmem driver is imported from pinned latest MT6755 downstream
+7de958eabcf37f07a34d8eb682c1db95ac3b7ce0, retaining its Google GPL attribution,
+legacy32/64 ioctl values and the prior FMODE_LSEEK correction. No ioctl or
+initialization result is stubbed. Actual source provenance and header hashes
+are retained privately in fleet-android-full-port/ASHMEM_SOURCE_PORT_RECEIPT.
+Owner-local adaptations use the real Linux6.18 interfaces: vfs_read with ssize_t,
+loff_t seek returns, vm_flags_clear, VMA file reference transfer/vfs_mmap, and
+allocated/registered shrinker with failure cleanup. Hole punching reports a
+purged range only after real vfs_fallocate succeeds; scan counts real pages.
+
+Evidence: packaged old kernel .config has Binder off; local upstream6.18
+headers remove __vfs_read/shmem_set_file/register_shrinker and provide the
+real replacements. The imported native driver contains actual ioctl/map/read/
+pin/purge logic, not an Android9 emulation shim. Actual native compile and
+QEMU-based generic kernel ABI tests are required before acceptance.
+Files/why: Android driver/Kconfig/Makefile and UAPI header implement/select the
+real legacy device; common Android fragment supplies missing framework core;
+M5c watchdog config corrects an observed symbol mismatch; this journal links
+source/API rationale and the unclosed hardware scope.
+Expected next marker: Binder/ashmem/SELinux and provider objects compile/link,
+then real guest Binder IPC and ashmem map/pin/purge/seek semantics. Guest tests
+are generic ABI tests, not MediaTek board/peripheral acceptance.
+Rollback: allocation/lifetime/refcount/ioctl regression, source/UAPI drift,
+missing generated symbol or native/runtime failure blocks promotion.
+Verification: frozen complete-source cloud build, actual generated-symbol and
+ARM64 object/map checks; QEMU boots the resulting Image with separate owned
+free-software initramfs and bounded real-userspace tests. No phone write.
+Legacy ION/Mali/HWC/audio/radio/camera and remaining per-board hardware ports
+still require actual implementations and evidence; this core does not close
+those rows by configuration alone.
