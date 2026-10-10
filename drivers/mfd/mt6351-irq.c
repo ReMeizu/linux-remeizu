@@ -5,6 +5,7 @@
 #include <linux/mfd/mt6351/core.h>
 #include <linux/mfd/mt6351/registers.h>
 #include <linux/mfd/mt6397/core.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 
 #define MT6351_IRQ(_irq) \

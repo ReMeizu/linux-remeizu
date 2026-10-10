@@ -133,3 +133,18 @@ Existing Android init/task profiles still use the legacy cpuset hierarchy;
 the Android compatibility fragment selects the actual v1 controller in
 addition to CPUSETS, with generated retention and real guest mount required.
 No missing symbol is papered over or replaced by a dummy hierarchy.
+
+## First complete-source native attempt: API include dependency
+
+FACT: actual source22772ebb passed all69 generated config/value checks and
+reached the23-object GCC14 build. MT6351 IRQ compilation failed because
+dev_fwnode was undeclared; the implicit int then mismatched the real regmap
+fwnode pointer argument. Actual6.18 include/linux/property.h declares the
+typed dev_fwnode macro. PROPER-FIX: include this header in the owning IRQ
+translation unit; no pointer cast, warning suppression or handler change.
+The other log markers include actual Binder/binderfs/ashmem compilation.
+Evidence: private native-22772ebb/NATIVE_FAILURE_R1.json and driver log.
+Expected next marker: all23 real objects and full Image link, then actual
+QEMU core ABI tests. Rollback: a different declaration/API requirement or
+unrelated IRQ behavior change blocks promotion. Config/source pins and old
+failed output are retained; next attempt uses a fresh directory/output.
