@@ -109,6 +109,7 @@
 		compatible = "mediatek,mt6755-infrasys", "syscon";
 		reg = <0 0x10001000 0 0x1000>;
 		#clock-cells = <1>;
+		#reset-cells = <1>;
 	};
 
 	apmixedsys: clock-controller@1000c000 {

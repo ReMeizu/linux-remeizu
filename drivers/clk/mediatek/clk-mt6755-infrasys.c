@@ -9,8 +9,10 @@
 
 #include "clk-gate.h"
 #include "clk-mtk.h"
+#include "reset.h"
 
 #include <dt-bindings/clock/mediatek,mt6755-clk.h>
+#include <dt-bindings/reset/mt6755-resets.h>
 
 static const struct mtk_gate_regs infra0_cg_regs = {
 	.set_ofs = 0x80,
@@ -143,10 +145,28 @@ static void mt6755_infrasys_unregister(void *arg)
 	mtk_free_clk_data(data);
 }
 
+static u16 mt6755_infra_rst_ofs[] = { 0x140 };
+static u16 mt6755_infra_rst_map[] = {
+	[MT6755_INFRA_PMIC_WRAP_RST] = 0,
+};
+
+static const struct mtk_clk_rst_desc mt6755_infra_rst_desc = {
+	.version = MTK_RST_SET_CLR,
+	.rst_bank_ofs = mt6755_infra_rst_ofs,
+	.rst_bank_nr = ARRAY_SIZE(mt6755_infra_rst_ofs),
+	.rst_idx_map = mt6755_infra_rst_map,
+	.rst_idx_map_nr = ARRAY_SIZE(mt6755_infra_rst_map),
+};
+
 static int mt6755_infrasys_probe(struct platform_device *pdev)
 {
 	struct clk_hw_onecell_data *data;
 	int ret;
+
+	ret = mtk_register_reset_controller_with_dev(&pdev->dev,
+						   &mt6755_infra_rst_desc);
+	if (ret)
+		return ret;
 
 	/* Binding IDs contain reserved holes; array length is not the ID range. */
 	data = mtk_alloc_clk_data(CLK_INFRA_NR_CLK);

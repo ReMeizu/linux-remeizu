@@ -168,3 +168,24 @@ and actual ARM64 userspace builds; actual kernel/guest ABI tests follow.
 Rollback: contradicting original license grant or any changed ABI token blocks
 acceptance. Verification: compare old/new header after comments are removed,
 run real headers_install.sh, then actual exported-header compile and guest.
+
+## MT6755 PMIC wrapper reset provider
+
+PROPER-FIX: export the real MT6755 infrastructure PMIC-wrapper reset output.
+The modern MT6755 clock provider lacks the reset needed by a genuine PWRAP
+host. Exact native MT6755 pwrap_hal.h defines set/clear offsets0x140/0x144;
+pwrap_hal.c toggles bit0 through0x1 in the actual initialization sequence.
+Use the existing managed MTK_RST_SET_CLR controller with one native-backed
+reset ID only. Probe propagates registration errors; no status, unrelated
+reset bit, display route, forced-ready or physical board activation is added.
+Files/why: typed reset binding, infrasys driver map/registration, SoC reset
+cells and conditional clock schema describe the implemented provider.
+Expected: real ARM64 clock/reset objects, schema-compatible DTBs and a PWRAP
+consumer acquiring reset0 when its own verified resources are wired.
+Rollback: native register/bit contradiction, registration/compiler/DTB error,
+or unrelated clock/reset behavior regression blocks promotion.
+Verification: source offset/bit audit, actual compiler/Kbuild/link and DTB
+roundtrip; later actual PWRAP/PMIC hardware readback. Current Imageaa140360
+predates this change; no new native or hardware acceptance is claimed yet.
+The full PWRAP register/capability/clock/PMIC host remains a separate current
+implementation task, not solved by this reset descriptor alone.
