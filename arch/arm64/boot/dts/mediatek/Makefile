@@ -118,3 +118,4 @@ DTC_FLAGS_mt8395-radxa-nio-12l := -@
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6755-meizu-m681.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6755-meizu-l681.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6750-meizu-u10.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt6737m-meizu-m5c.dtb

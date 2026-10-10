@@ -52,3 +52,22 @@ launched farm worker has no registered station build ID. Direct native-source
 fallback is explicit; do not attribute the fix to station auto-fix or another
 build's logs. Actual kernel compilation remains the acceptance gate, replacing
 the earlier stub-only type context with real kernel headers.
+
+## Complete Android integration work, 10 October 2026 — M5c source merge
+
+User requires complete latest-downstream/component/Android integration, not
+only a mainline native build. The full17-board/six-family scope remains.
+PROPER-FIX: integrate previously audited M5c MT6735M/MT6737M PWRAP, MT6328
+regulator/keys and MMC source1ebc6f2ed6b5bf56ab47e4fd943948d61de22119 with
+existing tested MT6755/U10 source995de406. Merge conflicts were only disjoint
+board enumeration/DTB Makefile additions; both identities are retained.
+Evidence: existing m5c source/stock/register audits and standalone DTB receipt;
+no actual C/runtime acceptance is added before the new native build.
+Files/why: the M5c tranche supplies actual providers/resources; this journal
+records the integration; YAML/Makefile retain all four separate board DTBs.
+Expected next marker: native MT6328/PWRAP/keys/MMC objects and full Image/DTB
+from the same source, together with Android-core configuration checks.
+Rollback: stock/source contradiction, native API error or lost board addition
+blocks promotion. Verification: source audit fixtures, generated config,
+actual ARM64 object/full Image make and per-board DTB identity. Boot/runtime
+remain open. Original branches/current phone owners are not modified.

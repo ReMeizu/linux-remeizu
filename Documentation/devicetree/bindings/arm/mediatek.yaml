@@ -51,6 +51,10 @@ properties:
           - const: mediatek,mt6592
       - items:
           - enum:
+              - meizu,m5c
+          - const: mediatek,mt6737m
+      - items:
+          - enum:
               - meizu,u10
           - const: mediatek,mt6750
       - items:

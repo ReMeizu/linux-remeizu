@@ -1,0 +1,120 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/dts-v1/;
+
+#include "mt6737m.dtsi"
+#include "mt6328.dtsi"
+
+/ {
+	model = "Meizu M5c";
+	compatible = "meizu,m5c", "mediatek,mt6737m";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x40000000>,
+		      <0 0x80000000 0 0x3f330000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		atf@43000000 {
+			reg = <0 0x43000000 0 0x30000>;
+			no-map;
+		};
+
+		ram-console@43f00000 {
+			reg = <0 0x43f00000 0 0x10000>;
+			no-map;
+		};
+
+		pstore@43f10000 {
+			reg = <0 0x43f10000 0 0xe0000>;
+			no-map;
+		};
+
+		minirdump@43ff0000 {
+			reg = <0 0x43ff0000 0 0x10000>;
+			no-map;
+		};
+
+		consys {
+			size = <0 0x100000>;
+			alignment = <0 0x200000>;
+			no-map;
+		};
+
+		modem {
+			size = <0 0x3810000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		dram-r0-dummy-read {
+			size = <0 0x1000>;
+			alignment = <0 0x1000>;
+			alloc-ranges = <0 0x40000000 0 0x40000000>;
+		};
+
+		dram-r1-dummy-read {
+			size = <0 0x1000>;
+			alignment = <0 0x1000>;
+			alloc-ranges = <0 0x80000000 0 0x3f330000>;
+		};
+	};
+};
+
+&pio {
+	uart0_default: uart0-default-pins {
+		pins-rx-tx {
+			pinmux = <PINMUX_GPIO74__FUNC_URXD0>,
+				 <PINMUX_GPIO75__FUNC_UTXD0>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_default>;
+	status = "okay";
+};
+
+&pwrap {
+	status = "okay";
+};
+
+&mt6328_keys {
+	status = "okay";
+};
+
+&mmc0 {
+	vmmc-supply = <&mt6328_vemc33_reg>;
+	vqmmc-supply = <&mt6328_vio18_reg>;
+	bus-width = <8>;
+	max-frequency = <26000000>;
+	non-removable;
+	disable-wp;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};
+
+&usb2 {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usb2phy {
+	status = "okay";
+};
