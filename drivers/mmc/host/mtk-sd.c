@@ -591,6 +591,18 @@ static const struct mtk_mmc_compatible mt6795_compat = {
 	.support_64g = false,
 };
 
+/*
+ * MT6797 has the 12-bit divider and PAD_TUNE0 register layout. Its
+ * stock path selection uses the asynchronous response/CRC FIFO but
+ * leaves the optional data-tuning path disabled. HS400 needs separate
+ * validation; it must not inherit the MT6795/MT8173 tuning sequence.
+ */
+static const struct mtk_mmc_compatible mt6797_compat = {
+	.clk_div_bits = 12,
+	.pad_tune_reg = MSDC_PAD_TUNE0,
+	.async_fifo = true,
+};
+
 static const struct mtk_mmc_compatible mt7620_compat = {
 	.clk_div_bits = 8,
 	.recheck_sdio_irq = true,
@@ -711,6 +723,7 @@ static const struct of_device_id msdc_of_ids[] = {
 	{ .compatible = "mediatek,mt6735m-mmc", .data = &mt6735_compat },
 	{ .compatible = "mediatek,mt6779-mmc", .data = &mt6779_compat},
 	{ .compatible = "mediatek,mt6795-mmc", .data = &mt6795_compat},
+	{ .compatible = "mediatek,mt6797-mmc", .data = &mt6797_compat},
 	{ .compatible = "mediatek,mt7620-mmc", .data = &mt7620_compat},
 	{ .compatible = "mediatek,mt7622-mmc", .data = &mt7622_compat},
 	{ .compatible = "mediatek,mt7986-mmc", .data = &mt7986_compat},

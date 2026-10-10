@@ -15,6 +15,7 @@
 #include <linux/mfd/mt6323/core.h>
 #include <linux/mfd/mt6328/core.h>
 #include <linux/mfd/mt6331/core.h>
+#include <linux/mfd/mt6351/core.h>
 #include <linux/mfd/mt6357/core.h>
 #include <linux/mfd/mt6358/core.h>
 #include <linux/mfd/mt6359/core.h>
@@ -22,6 +23,7 @@
 #include <linux/mfd/mt6323/registers.h>
 #include <linux/mfd/mt6328/registers.h>
 #include <linux/mfd/mt6331/registers.h>
+#include <linux/mfd/mt6351/registers.h>
 #include <linux/mfd/mt6357/registers.h>
 #include <linux/mfd/mt6358/registers.h>
 #include <linux/mfd/mt6359/registers.h>
@@ -160,6 +162,10 @@ static const struct mfd_cell mt6328_devs[] = {
 	},
 };
 
+static const struct mfd_cell mt6351_devs[] = {
+	{ .name = "mt6351-regulator" },
+};
+
 static const struct mfd_cell mt6357_devs[] = {
 	{
 		.name = "mt6359-auxadc",
@@ -285,6 +291,7 @@ struct chip_data {
 	const struct mfd_cell *cells;
 	int cell_size;
 	int (*irq_init)(struct mt6397_chip *chip);
+	void (*irq_exit)(struct mt6397_chip *chip);
 };
 
 static const struct chip_data mt6323_core = {
@@ -301,6 +308,15 @@ static const struct chip_data mt6328_core = {
 	.cells = mt6328_devs,
 	.cell_size = ARRAY_SIZE(mt6328_devs),
 	.irq_init = mt6397_irq_init,
+};
+
+static const struct chip_data mt6351_core = {
+	.cid_addr = MT6351_SWCID,
+	.cid_shift = 8,
+	.cells = mt6351_devs,
+	.cell_size = ARRAY_SIZE(mt6351_devs),
+	.irq_init = mt6351_irq_init,
+	.irq_exit = mt6351_irq_exit,
 };
 
 static const struct chip_data mt6357_core = {
@@ -390,7 +406,10 @@ static int mt6397_probe(struct platform_device *pdev)
 				   pmic_core->cells, pmic_core->cell_size,
 				   NULL, 0, pmic->irq_domain);
 	if (ret) {
-		irq_domain_remove(pmic->irq_domain);
+		if (pmic_core->irq_exit)
+			pmic_core->irq_exit(pmic);
+		else
+			irq_domain_remove(pmic->irq_domain);
 		dev_err(&pdev->dev, "failed to add child devices: %d\n", ret);
 	}
 
@@ -407,6 +426,9 @@ static const struct of_device_id mt6397_of_match[] = {
 	}, {
 		.compatible = "mediatek,mt6331",
 		.data = &mt6331_mt6332_core,
+	}, {
+		.compatible = "mediatek,mt6351",
+		.data = &mt6351_core,
 	}, {
 		.compatible = "mediatek,mt6357",
 		.data = &mt6357_core,

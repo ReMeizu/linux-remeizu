@@ -915,6 +915,13 @@ config REGULATOR_MT6332
 	  This driver supports the control of different power rails of device
 	  through regulator interface
 
+config REGULATOR_MT6351
+	tristate "MediaTek MT6351 storage regulators"
+	depends on MFD_MT6397
+	help
+	  Support the VEMC, VMCH and VMC LDOs of the MT6351 PMIC.
+	  E2 and E3 revisions are supported; E1 voltage maps are not.
+
 config REGULATOR_MT6357
 	tristate "MediaTek MT6357 PMIC"
 	depends on MFD_MT6397

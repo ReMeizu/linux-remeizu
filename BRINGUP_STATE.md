@@ -71,3 +71,18 @@ Rollback: stock/source contradiction, native API error or lost board addition
 blocks promotion. Verification: source audit fixtures, generated config,
 actual ARM64 object/full Image make and per-board DTB identity. Boot/runtime
 remain open. Original branches/current phone owners are not modified.
+
+## MX6 tranche integrated
+
+PROPER-FIX: merge sourcec429a17599d2e3c85a7418b9f7587880a122a1cd without
+changing existing device owners. Real MT6351 regulator/IRQ/MFD children,
+MT6797 EINT/pad/reset and MMC compatibility join the same kernel source.
+Evidence: original MX6 native register/pad/IRQ audits and per-file receipts;
+the merge was clean, including disjoint MT6735/MT6797 MMC/regulator wiring.
+Expected next marker: actual MT6351/MT6797 objects, all five board DTBs and
+full common Image, without Android/core config symbols dropping. Rollback:
+source/register contradiction, lost chip match or native API error blocks
+acceptance. Source presence is not a chip probe or enabled board hardware;
+MX6 eMMC/PWRAP/AFE activation and all component runtime remain pending.
+Verification: immutable merged-source config/object/link/DTB cloud job, then
+source/stock audit and actual hardware evidence at each device's own gate.
