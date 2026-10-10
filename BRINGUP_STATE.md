@@ -127,3 +127,9 @@ free-software initramfs and bounded real-userspace tests. No phone write.
 Legacy ION/Mali/HWC/audio/radio/camera and remaining per-board hardware ports
 still require actual implementations and evidence; this core does not close
 those rows by configuration alone.
+
+PROPER-FIX follow-up: Linux6.18 separates CPUSETS_V1 (default n) from CPUSETS.
+Existing Android init/task profiles still use the legacy cpuset hierarchy;
+the Android compatibility fragment selects the actual v1 controller in
+addition to CPUSETS, with generated retention and real guest mount required.
+No missing symbol is papered over or replaced by a dummy hierarchy.
