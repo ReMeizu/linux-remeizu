@@ -32,6 +32,11 @@
 #define U3D_EPIESR		(SSUSB_DEV_BASE + 0x0088)
 #define U3D_EPIECR		(SSUSB_DEV_BASE + 0x008C)
 
+#define U3D_DMAISR		(SSUSB_DEV_BASE + 0x0090)
+#define U3D_DMAIER		(SSUSB_DEV_BASE + 0x0094)
+#define U3D_DMAIESR		(SSUSB_DEV_BASE + 0x0098)
+#define U3D_DMAIECR		(SSUSB_DEV_BASE + 0x009C)
+
 #define U3D_EP0CSR		(SSUSB_DEV_BASE + 0x0100)
 #define U3D_RXCOUNT0		(SSUSB_DEV_BASE + 0x0108)
 #define U3D_RESERVED		(SSUSB_DEV_BASE + 0x010C)
@@ -108,6 +113,11 @@
 #define SETUPENDISR		BIT(16)
 #define EPTISR(x)		(BIT(0) << (x))
 #define EP0ISR			BIT(0)
+
+/* U3D_DMAISR / U3D_DMAIER / U3D_DMAIESR / U3D_DMAIECR (legacy per-EP DMA) */
+#define RXDMAISR		BIT(2)
+#define TXDMAISR		BIT(1)
+#define EP0DMAISR		BIT(0)
 
 /* U3D_EP0CSR */
 #define EP0_SENDSTALL		BIT(25)
@@ -261,11 +271,16 @@
 
 #define U3D_DEVICE_CONF			(SSUSB_EPCTL_CSR_BASE + 0x0000)
 #define U3D_EP_RST			(SSUSB_EPCTL_CSR_BASE + 0x0004)
+#define U3D_USB2_RX_EP_DATAERR_INTR	(SSUSB_EPCTL_CSR_BASE + 0x0020)
 
 #define U3D_DEV_LINK_INTR_ENABLE	(SSUSB_EPCTL_CSR_BASE + 0x0050)
 #define U3D_DEV_LINK_INTR		(SSUSB_EPCTL_CSR_BASE + 0x0054)
 
 /*---------------- SSUSB_EPCTL_CSR FIELD DEFINITION ----------------*/
+
+/* U3D_USB2_RX_EP_DATAERR_INTR: [31:16] per-EP enable, [15:0] per-EP W1C status */
+#define RX_EP_DATAERR_INT_EN		GENMASK(31, 16)
+#define RX_EP_DATAERR_INT_STS		GENMASK(15, 0)
 
 /* U3D_DEVICE_CONF */
 #define DEV_ADDR_MSK		GENMASK(30, 24)
@@ -500,11 +515,23 @@
 /* U3D_SSUSB_IP_PW_STS2 */
 #define SSUSB_U2_MAC_SYS_RST_B_STS	BIT(0)
 
-/* U3D_SSUSB_OTG_STS */
+/* U3D_SSUSB_OTG_STS (bits 9/10/12 are *state*, not interrupt latches) */
+#define SSUSB_AVALID_STS		BIT(12)
+#define SSUSB_IDDIG			BIT(10)
 #define SSUSB_VBUS_VALID		BIT(9)
+#define SSUSB_DEV_USBRST_INTR		BIT(7)
+#define SSUSB_VBUS_CHG_INTR		BIT(6)
 
-/* U3D_SSUSB_OTG_STS_CLR */
+/*
+ * U3D_SSUSB_OTG_STS_CLR: W1C, and its bit layout is DISTINCT from OTG_STS —
+ * writing an OTG_STS *value* back (which only has the state bits 9/10/12 set)
+ * clears no latch. Each latch has its own clear bit here.
+ */
+#define SSUSB_SRP_REQ_INTR_CLR		BIT(11)
+#define SSUSB_DEV_USBRST_INTR_CLR	BIT(7)
 #define SSUSB_VBUS_INTR_CLR		BIT(6)
+/* every OTG interrupt-latch clear bit: role[0:5], VBUS[6], USBRST[7], SRP[11] */
+#define SSUSB_OTG_INTR_CLR_ALL		(BIT(11) | GENMASK(7, 0))
 
 /* U3D_SSUSB_IP_XHCI_CAP */
 #define SSUSB_IP_XHCI_U2_PORT_NUM(x)	(((x) >> 8) & 0xff)

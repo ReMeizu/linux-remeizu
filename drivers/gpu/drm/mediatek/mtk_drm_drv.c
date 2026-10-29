@@ -330,7 +330,26 @@ static const struct mtk_mmsys_driver_data mt8365_mmsys_driver_data = {
 	.mmsys_dev_num = 1,
 };
 
+static const unsigned int mt6755_mtk_ddp_main[] = {
+	DDP_COMPONENT_OVL0,
+	DDP_COMPONENT_COLOR0,
+	DDP_COMPONENT_CCORR,
+	DDP_COMPONENT_AAL0,
+	DDP_COMPONENT_GAMMA,
+	DDP_COMPONENT_DITHER0,
+	DDP_COMPONENT_RDMA0,
+	DDP_COMPONENT_DSI0,
+};
+
+static const struct mtk_mmsys_driver_data mt6755_mmsys_driver_data = {
+	.main_path = mt6755_mtk_ddp_main,
+	.main_len = ARRAY_SIZE(mt6755_mtk_ddp_main),
+	.mmsys_dev_num = 1,
+};
+
 static const struct of_device_id mtk_drm_of_ids[] = {
+	{ .compatible = "mediatek,mt6755-mmsys",
+	  .data = &mt6755_mmsys_driver_data},
 	{ .compatible = "mediatek,mt2701-mmsys",
 	  .data = &mt2701_mmsys_driver_data},
 	{ .compatible = "mediatek,mt7623-mmsys",
@@ -751,6 +770,8 @@ static const struct of_device_id mtk_ddp_comp_dt_ids[] = {
 	{ .compatible = "mediatek,mt2701-disp-mutex",
 	  .data = (void *)MTK_DISP_MUTEX },
 	{ .compatible = "mediatek,mt2712-disp-mutex",
+	  .data = (void *)MTK_DISP_MUTEX },
+	{ .compatible = "mediatek,mt6755-disp-mutex",
 	  .data = (void *)MTK_DISP_MUTEX },
 	{ .compatible = "mediatek,mt8167-disp-mutex",
 	  .data = (void *)MTK_DISP_MUTEX },

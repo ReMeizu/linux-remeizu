@@ -6,6 +6,7 @@
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/component.h>
+#include <linux/delay.h>
 #include <linux/iopoll.h>
 #include <linux/irq.h>
 #include <linux/of.h>
@@ -193,6 +194,14 @@ struct mtk_dsi_driver_data {
 	bool has_size_ctl;
 	bool cmdq_long_packet_ctl;
 	bool support_per_frame_lp;
+	/*
+	 * m681/MT6755: program the horizontal blanking word counts with the
+	 * stock ddp_dsi.c formulas instead of the upstream phy-cycle shaving.
+	 * The upstream math hands this panel roughly half the stock blanking
+	 * (HSA/HBP/HFP_WC 14/121/114 vs stock 20/224/200) — visible as
+	 * vertical bar garbage once the kernel owns the panel.
+	 */
+	bool stock_vdo_wc;
 };
 
 struct mtk_dsi {
@@ -211,6 +220,7 @@ struct mtk_dsi {
 	struct clk *hs_clk;
 
 	u32 data_rate;
+	u32 data_rate_override;	/* board DT "mediatek,data-rate" (m681: 960M) */
 
 	unsigned long mode_flags;
 	enum mipi_dsi_pixel_format format;
@@ -247,6 +257,61 @@ static void mtk_dsi_phy_timconfig(struct mtk_dsi *dsi)
 	u32 timcon0, timcon1, timcon2, timcon3;
 	u32 data_rate_mhz = DIV_ROUND_UP(dsi->data_rate, HZ_PER_MHZ);
 	struct mtk_phy_timing *timing = &dsi->phy_timing;
+
+	if (dsi->driver_data->stock_vdo_wc) {
+		/*
+		 * Byte-exact stock ddp_dsi.c DSI_PHY_TIMCONFIG() formulas.
+		 * Verified against the live TWRP (stock kernel) register dump
+		 * at 960 Mbps: 0x09100808 / 0x10280c20 / 0x0b2c0100 /
+		 * 0x00101607 — the upstream formulas ran 25-35% short on
+		 * HS_ZERO/CLK_ZERO/CLK_HS_POST for this panel.
+		 */
+		u32 cycle = 8000 / data_rate_mhz + 1;	/* ns per byte-clock */
+		u32 ui = 1000 / data_rate_mhz + 1;	/* ns per UI */
+
+		timing->lpx = max_t(u32, 1, 0x50 / cycle);
+		timing->da_hs_prepare = max_t(u32, 1, (0x40 + 5 * ui) / cycle);
+		timing->da_hs_zero = (0xC8 + 10 * ui) / cycle;
+		if (timing->da_hs_zero > timing->da_hs_prepare)
+			timing->da_hs_zero -= timing->da_hs_prepare;
+		timing->da_hs_trail = max_t(u32, 1, (4 * ui + 0x50) / cycle);
+
+		timing->ta_get = 5 * timing->lpx;
+		timing->ta_sure = 3 * timing->lpx / 2;
+		timing->ta_go = 4 * timing->lpx;
+		timing->da_hs_exit = 2 * timing->lpx;
+
+		timing->clk_hs_trail = max_t(u32, 2, 0x60 / cycle + 1);
+		timing->clk_hs_zero = 0x190 / cycle;
+		timing->clk_hs_prepare = max_t(u32, 1, 0x40 / cycle);
+		timing->clk_hs_post = (0x60 + 0x34 * ui) / cycle;
+		timing->clk_hs_exit = 2 * timing->lpx;
+
+		timcon0 = FIELD_PREP(LPX, timing->lpx) |
+			  FIELD_PREP(HS_PREP, timing->da_hs_prepare) |
+			  FIELD_PREP(HS_ZERO, timing->da_hs_zero) |
+			  FIELD_PREP(HS_TRAIL, timing->da_hs_trail);
+		timcon1 = FIELD_PREP(TA_GO, timing->ta_go) |
+			  FIELD_PREP(TA_SURE, timing->ta_sure) |
+			  FIELD_PREP(TA_GET, timing->ta_get) |
+			  FIELD_PREP(DA_HS_EXIT, timing->da_hs_exit);
+		timcon2 = FIELD_PREP(DA_HS_SYNC, 1) |
+			  FIELD_PREP(CLK_ZERO, timing->clk_hs_zero) |
+			  FIELD_PREP(CLK_TRAIL, timing->clk_hs_trail);
+		timcon3 = FIELD_PREP(CLK_HS_PREP, timing->clk_hs_prepare) |
+			  FIELD_PREP(CLK_HS_POST, timing->clk_hs_post) |
+			  FIELD_PREP(CLK_HS_EXIT, timing->clk_hs_exit);
+
+		writel(timcon0, dsi->regs + DSI_PHY_TIMECON0);
+		writel(timcon1, dsi->regs + DSI_PHY_TIMECON1);
+		writel(timcon2, dsi->regs + DSI_PHY_TIMECON2);
+		writel(timcon3, dsi->regs + DSI_PHY_TIMECON3);
+
+		dev_info(dsi->host.dev,
+			 "DSIDBG phy(stock): data_rate=%u timcon0=%08x timcon1=%08x timcon2=%08x timcon3=%08x\n",
+			 dsi->data_rate, timcon0, timcon1, timcon2, timcon3);
+		return;
+	}
 
 	timing->lpx = (60 * data_rate_mhz / (8 * 1000)) + 1;
 	timing->da_hs_prepare = (80 * data_rate_mhz + 4 * 1000) / 8000;
@@ -287,6 +352,11 @@ static void mtk_dsi_phy_timconfig(struct mtk_dsi *dsi)
 	writel(timcon1, dsi->regs + DSI_PHY_TIMECON1);
 	writel(timcon2, dsi->regs + DSI_PHY_TIMECON2);
 	writel(timcon3, dsi->regs + DSI_PHY_TIMECON3);
+
+	/* m681 bring-up debug mark: numeric compare vs stock ddp_dsi timcon */
+	dev_info(dsi->host.dev,
+		 "DSIDBG phy: data_rate=%u timcon0=%08x timcon1=%08x timcon2=%08x timcon3=%08x\n",
+		 dsi->data_rate, timcon0, timcon1, timcon2, timcon3);
 }
 
 static void mtk_dsi_enable(struct mtk_dsi *dsi)
@@ -386,6 +456,10 @@ static void mtk_dsi_rxtx_control(struct mtk_dsi *dsi)
 	if (dsi->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS)
 		regval |= HSTX_CKLP_EN;
 
+	/* stock silicon (TWRP dump): TXRX_CTRL = 0x0001003c — CKLP set */
+	if (dsi->driver_data->stock_vdo_wc)
+		regval |= HSTX_CKLP_EN;
+
 	if (dsi->mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET)
 		regval |= DIS_EOT;
 
@@ -426,7 +500,16 @@ static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 	if (config_vact) {
 		vact_nl = FIELD_PREP(VACT_NL, dsi->vm.vactive);
 		writel(vact_nl, dsi->regs + DSI_VACT_NL);
-		writel(ps_wc, dsi->regs + DSI_HSTX_CKL_WC);
+		/*
+		 * stock silicon (TWRP dump): HSTX_CKL_WC = 0xd80 (3456), not
+		 * the bare pixel-stream word count (0xca8) — the stock value
+		 * includes the horizontal blanking share for the clock-lane
+		 * LP window.
+		 */
+		if (dsi->driver_data->stock_vdo_wc)
+			writel(0xd80, dsi->regs + DSI_HSTX_CKL_WC);
+		else
+			writel(ps_wc, dsi->regs + DSI_HSTX_CKL_WC);
 	}
 	writel(ps_val, dsi->regs + DSI_PSCTRL);
 }
@@ -516,6 +599,43 @@ static void mtk_dsi_config_vdo_timing_per_line_lp(struct mtk_dsi *dsi)
 	else
 		dsi_tmp_buf_bpp = 3;
 
+	if (dsi->driver_data->stock_vdo_wc) {
+		/*
+		 * Byte-exact stock ddp_dsi.c DSI_Config_VDO_Timing() for the
+		 * burst/sync-event modes: no phy-cycle shaving, ALIGN4 like
+		 * stock. For the m681 panel (HSA 8, HBP 70, HFP 70, bpp 3):
+		 * HSA_WC 20, HBP_WC 224, HFP_WC 200.
+		 */
+		horizontal_sync_active_byte =
+			round_up(vm->hsync_len * dsi_tmp_buf_bpp - 4, 4);
+		if (dsi->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
+			horizontal_sync_active_byte =
+				round_up(vm->hsync_len * dsi_tmp_buf_bpp - 10, 4);
+			horizontal_backporch_byte =
+				round_up(vm->hback_porch * dsi_tmp_buf_bpp - 10, 4);
+		} else {
+			horizontal_backporch_byte =
+				round_up((vm->hback_porch + vm->hsync_len) *
+					 dsi_tmp_buf_bpp - 10, 4);
+		}
+		horizontal_frontporch_byte =
+			round_up(vm->hfront_porch * dsi_tmp_buf_bpp - 12, 4);
+
+		/*
+		 * The live TWRP (stock kernel) silicon dump shows HBP_WC 256
+		 * and HFP_WC 228 where the base DSI_Config_VDO_Timing()
+		 * formulas give 224/200 — the stock trigger path adds a
+		 * clock-lane LP per-line overhead of +32/+28. Match silicon.
+		 */
+		horizontal_backporch_byte += 32;
+		horizontal_frontporch_byte += 28;
+
+		writel(horizontal_sync_active_byte, dsi->regs + DSI_HSA_WC);
+		writel(horizontal_backporch_byte, dsi->regs + DSI_HBP_WC);
+		writel(horizontal_frontporch_byte, dsi->regs + DSI_HFP_WC);
+		return;
+	}
+
 	horizontal_sync_active_byte = (vm->hsync_len * dsi_tmp_buf_bpp - 10);
 
 	if (dsi->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE)
@@ -583,6 +703,18 @@ static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 		mtk_dsi_config_vdo_timing_per_line_lp(dsi);
 
 	mtk_dsi_ps_control(dsi, false);
+
+	/*
+	 * m681 bring-up debug mark: the values that actually landed in the
+	 * hardware, for numeric compare vs stock ddp_dsi programming.
+	 */
+	dev_info(dsi->host.dev,
+		 "DSIDBG vdo: VSA=%u VBP=%u VFP=%u VACT=%u HSA_WC=%u HBP_WC=%u HFP_WC=%u PSCTRL=%08x TXRX=%08x\n",
+		 readl(dsi->regs + DSI_VSA_NL), readl(dsi->regs + DSI_VBP_NL),
+		 readl(dsi->regs + DSI_VFP_NL), readl(dsi->regs + DSI_VACT_NL),
+		 readl(dsi->regs + DSI_HSA_WC), readl(dsi->regs + DSI_HBP_WC),
+		 readl(dsi->regs + DSI_HFP_WC), readl(dsi->regs + DSI_PSCTRL),
+		 readl(dsi->regs + DSI_TXRX_CTRL));
 }
 
 static void mtk_dsi_start(struct mtk_dsi *dsi)
@@ -618,23 +750,46 @@ static void mtk_dsi_irq_data_clear(struct mtk_dsi *dsi, u32 irq_bit)
 	dsi->irq_data &= ~irq_bit;
 }
 
+static void mtk_dsi_lane_ready(struct mtk_dsi *dsi);
+
 static s32 mtk_dsi_wait_for_irq_done(struct mtk_dsi *dsi, u32 irq_flag,
 				     unsigned int timeout)
 {
-	s32 ret = 0;
-	unsigned long jiffies = msecs_to_jiffies(timeout);
+	u32 status;
+	int i, j;
 
-	ret = wait_event_interruptible_timeout(dsi->irq_wait_queue,
-					       dsi->irq_data & irq_flag,
-					       jiffies);
-	if (ret == 0) {
-		DRM_WARN("Wait DSI IRQ(0x%08x) Timeout\n", irq_flag);
+	/*
+	 * m681/MT6755: the DSI GIC line (SPI 194) never fires on this board —
+	 * /proc/interrupts shows 14012000.dsi at 0 on every CPU — so the
+	 * original wait_event on dsi->irq_data (set only from mtk_dsi_irq())
+	 * never wakes and every CMD_DONE / VM_DONE wait times out (-62),
+	 * blocking all panel init DCS. The DSI engine still latches the status
+	 * bits in DSI_INTSTA regardless of GIC delivery, so poll that directly.
+	 */
+	for (i = 0; i < timeout * 20; i++) {	/* ~50us/iter => timeout ms */
+		if (dsi->irq_data & irq_flag)	/* IRQ path won the race */
+			return 1;
 
-		mtk_dsi_enable(dsi);
-		mtk_dsi_reset_engine(dsi);
+		status = readl(dsi->regs + DSI_INTSTA) & irq_flag;
+		if (status) {
+			for (j = 0; j < 2000; j++) {
+				mtk_dsi_mask(dsi, DSI_RACK, RACK, RACK);
+				if (!(readl(dsi->regs + DSI_INTSTA) & DSI_BUSY))
+					break;
+				udelay(1);
+			}
+			mtk_dsi_mask(dsi, DSI_INTSTA, status, 0);
+			mtk_dsi_irq_data_set(dsi, status);
+			return 1;
+		}
+		usleep_range(40, 60);
 	}
 
-	return ret;
+	DRM_WARN("Wait DSI IRQ(0x%08x) Timeout (polled)\n", irq_flag);
+	mtk_dsi_enable(dsi);
+	mtk_dsi_reset_engine(dsi);
+
+	return 0;
 }
 
 static irqreturn_t mtk_dsi_irq(int irq, void *dev_id)
@@ -646,10 +801,25 @@ static irqreturn_t mtk_dsi_irq(int irq, void *dev_id)
 	status = readl(dsi->regs + DSI_INTSTA) & flag;
 
 	if (status) {
-		do {
+		int i;
+
+		/*
+		 * m681/MT6755: LK can hand off with the DSI video engine still
+		 * live, so DSI_BUSY may never clear here. Bound the RACK ack loop
+		 * (~2 ms) instead of spinning forever in hardirq with IRQs off,
+		 * which pegs the CPU -> rcu_sched stall + console_lock wedge
+		 * (the boot-hang symptom). RACK re-assertion is preserved so a
+		 * genuinely-draining BUSY still clears.
+		 */
+		for (i = 0; i < 2000; i++) {
 			mtk_dsi_mask(dsi, DSI_RACK, RACK, RACK);
 			tmp = readl(dsi->regs + DSI_INTSTA);
-		} while (tmp & DSI_BUSY);
+			if (!(tmp & DSI_BUSY))
+				break;
+			udelay(1);
+		}
+		if (tmp & DSI_BUSY)
+			pr_warn_ratelimited("mtk_dsi: DSI_BUSY stuck in IRQ, INTSTA=0x%08x\n", tmp);
 
 		mtk_dsi_mask(dsi, DSI_INTSTA, status, 0);
 		mtk_dsi_irq_data_set(dsi, status);
@@ -691,6 +861,15 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 	dsi->data_rate = DIV_ROUND_UP_ULL(dsi->vm.pixelclock * bit_per_pixel,
 					  dsi->lanes);
 
+	/*
+	 * m681: stock runs this link at PLL_CLOCK 480 MHz = 960 Mbps/lane
+	 * (burst), well above the pixel minimum (~870). Allow the board DT to
+	 * pin the stock rate ("mediatek,data-rate") instead of the computed
+	 * minimum — burst mode absorbs the surplus as BLLP.
+	 */
+	if (dsi->data_rate_override > dsi->data_rate)
+		dsi->data_rate = dsi->data_rate_override;
+
 	ret = clk_set_rate(dsi->hs_clk, dsi->data_rate);
 	if (ret < 0) {
 		dev_err(dev, "Failed to set data rate: %d\n", ret);
@@ -724,6 +903,8 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 	mtk_dsi_set_vm_cmd(dsi);
 	mtk_dsi_config_vdo_timing(dsi);
 	mtk_dsi_set_interrupt_enable(dsi);
+	mtk_dsi_lane_ready(dsi);
+	mtk_dsi_set_cmd_mode(dsi);
 
 	return 0;
 err_disable_engine_clk:
@@ -1203,6 +1384,10 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 
 	dsi->driver_data = of_device_get_match_data(dev);
 
+	/* optional board override of the HS link rate (m681: stock 960 Mbps) */
+	of_property_read_u32(dev->of_node, "mediatek,data-rate",
+			     &dsi->data_rate_override);
+
 	dsi->engine_clk = devm_clk_get(dev, "engine");
 	if (IS_ERR(dsi->engine_clk))
 		return dev_err_probe(dev, PTR_ERR(dsi->engine_clk),
@@ -1241,6 +1426,15 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to register DSI host\n");
 
+	/* Mask + clear any interrupt the bootloader left enabled before hooking
+	 * the handler (same warm-handoff guard as the OVL/RDMA probes): on m681
+	 * LK may hand off with DSI live. */
+	writel(0x0, dsi->regs + DSI_INTEN);
+	writel(0x0, dsi->regs + DSI_INTSTA);
+	/* m681 warm handoff: stop LK's live video engine so the first LP
+	 * command IRQ doesn't see DSI_BUSY stuck from streaming (REPORT R6). */
+	writel(0x0, dsi->regs + DSI_START);
+
 	ret = devm_request_irq(&pdev->dev, irq_num, mtk_dsi_irq,
 			       IRQF_TRIGGER_NONE, dev_name(&pdev->dev), dsi);
 	if (ret) {
@@ -1266,6 +1460,14 @@ static const struct mtk_dsi_driver_data mt8173_dsi_driver_data = {
 	.reg_cmdq_off = 0x200,
 	.reg_vm_cmd_off = 0x130,
 	.reg_shadow_dbg_off = 0x190
+};
+
+/* mt8173 register layout (verified against stock ddp_reg.h) + stock WC math */
+static const struct mtk_dsi_driver_data mt6755_dsi_driver_data = {
+	.reg_cmdq_off = 0x200,
+	.reg_vm_cmd_off = 0x130,
+	.reg_shadow_dbg_off = 0x190,
+	.stock_vdo_wc = true,
 };
 
 static const struct mtk_dsi_driver_data mt2701_dsi_driver_data = {
@@ -1303,6 +1505,7 @@ static const struct mtk_dsi_driver_data mt8188_dsi_driver_data = {
 static const struct of_device_id mtk_dsi_of_match[] = {
 	{ .compatible = "mediatek,mt2701-dsi", .data = &mt2701_dsi_driver_data },
 	{ .compatible = "mediatek,mt8167-dsi", .data = &mt2701_dsi_driver_data },
+	{ .compatible = "mediatek,mt6755-dsi", .data = &mt6755_dsi_driver_data },
 	{ .compatible = "mediatek,mt8173-dsi", .data = &mt8173_dsi_driver_data },
 	{ .compatible = "mediatek,mt8183-dsi", .data = &mt8183_dsi_driver_data },
 	{ .compatible = "mediatek,mt8186-dsi", .data = &mt8186_dsi_driver_data },

@@ -41,6 +41,7 @@ obj-$(CONFIG_COMPAT)			+= sys32.o signal32.o			\
 obj-$(CONFIG_COMPAT)			+= sigreturn32.o
 obj-$(CONFIG_COMPAT_ALIGNMENT_FIXUPS)	+= compat_alignment.o
 obj-$(CONFIG_KUSER_HELPERS)		+= kuser32.o
+obj-$(CONFIG_ARCH_MEDIATEK)		+= mt6755_smp.o
 obj-$(CONFIG_FUNCTION_TRACER)		+= ftrace.o entry-ftrace.o
 obj-$(CONFIG_MODULES)			+= module.o module-plts.o
 obj-$(CONFIG_PERF_EVENTS)		+= perf_regs.o perf_callchain.o

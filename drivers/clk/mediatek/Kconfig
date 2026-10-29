@@ -133,6 +133,22 @@ config COMMON_CLK_MT6735
 	  by apmixedsys, topckgen, infracfg and pericfg on the
 	  MediaTek MT6735 SoC.
 
+config COMMON_CLK_MT6755
+	tristate "Main clock drivers for MediaTek MT6755"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	select COMMON_CLK_MEDIATEK
+	help
+	  This enables drivers for clocks and resets provided
+	  by apmixedsys, topckgen and infracfg on the
+	  MediaTek MT6755 SoC.
+
+config COMMON_CLK_MT6755_MMSYS
+	tristate "Clock driver for MediaTek MT6755 mmsys"
+	depends on COMMON_CLK_MT6755
+	help
+	  This driver supports MediaTek MT6755 mmsys clock gates
+	  (CG0 0x100 / CG1 0x110), required by the display subsystem.
+
 config COMMON_CLK_MT6735_IMGSYS
 	tristate "Clock driver for MediaTek MT6735 imgsys"
 	depends on COMMON_CLK_MT6735

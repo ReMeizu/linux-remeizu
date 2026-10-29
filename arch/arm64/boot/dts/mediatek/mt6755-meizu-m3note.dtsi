@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <dt-bindings/pinctrl/mt65xx.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include "mt6755.dtsi"
 
 / {
@@ -8,10 +11,822 @@
 	};
 
 	chosen {
-		stdout-path = "serial0:115200n8";
+		/*
+		 * lk replaces bootargs with the boot.img cmdline + its own
+		 * additions (bootopt, lcm, vram, serialno, ...). This node
+		 * only has to exist. Real knobs live in the boot.img cmdline.
+		 */
+		bootargs = "";
+	};
+
+	/*
+	 * /reserved-memory has to exist even if practically empty or the
+	 * bootloader will be unhappy. Region sizes follow the stock 3.10
+	 * dtsi (ccci/consys/spm); ramoops reuses the stock pstore region.
+	 */
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/*
+		 * ramoops "good log" store — KEPT AT THE M1 KNOWN-GOOD EXTENT.
+		 * The region MUST end at/below 0x444f0000: the secure/LK minidump
+		 * lives at 0x444f0000 (see captures/minirdump_444f0000.bin). A
+		 * previous attempt grew this to 0x1c0000 (ending 0x445d0000) and
+		 * overlapped the minidump -> the kernel died before pstore console
+		 * init (p31 root never written, no DBGC in ramoops). 0xe0000 ends
+		 * exactly at 0x444f0000 = the max safe size. No ecc (its interaction
+		 * with stale non-ECC data was a second unverified variable).
+		 */
+		ramoops@44410000 {
+			compatible = "ramoops";
+			reg = <0x0 0x44410000 0x0 0xe0000>;
+			console-size = <0x40000>;
+			record-size = <0x10000>;
+			pmsg-size = <0x10000>;
+		};
+
+		/* ARM Trusted Firmware, per stock dtsi and live iomem map */
+		atf-reserved@44600000 {
+			no-map;
+			reg = <0x0 0x44600000 0x0 0x40000>;
+		};
+
+		/*
+		 * r94: ccci-md1 (161 MiB) + ccci-share (6 MiB) RECLAIMED. These
+		 * carved out the cellular modem's shared DRAM, but mainline has no
+		 * eccci/modem driver (the MD coprocessor never boots — no md1img
+		 * load), so the region is just idle DRAM. Removing the nodes hands
+		 * 167 MiB back to Linux (MemTotal 1.52 -> ~1.68 GiB). If a modem
+		 * bring-up is ever attempted, restore these first.
+		 */
+
+		spm-reserved {
+			no-map;
+			size = <0x0 0x20000>;
+			alignment = <0x0 0x10000>;
+			alloc-ranges = <0x0 0x40000000 0x0 0x60000000>;
+		};
+
+		consys-reserved {
+			no-map;
+			size = <0x0 0x100000>;
+			alignment = <0x0 0x200000>;
+			alloc-ranges = <0x0 0x40000000 0x0 0x60000000>;
+		};
+
+		/*
+		 * lk framebuffer (boot logo). FIXED reg = the address the stock
+		 * lk mblock_alloc'd it to: top-down, 64KiB-aligned, below
+		 * 0xa0000000, size = DISP_GetVRamSize() = 0x1be0000, so it abuts
+		 * the consys reserve at 0x9fe00000 (0x9fe00000 - 0x1be0000).
+		 * Derived by RE of flyme7/lk.bin; see scratchpad-display/README.md.
+		 * no-map so Linux never reuses it and simpledrm can keep scanning
+		 * out the image lk left running on the DSI link.
+		 */
+		fb_reserved: framebuffer@9e220000 {
+			reg = <0x0 0x9e220000 0x0 0x01be0000>;
+			no-map;
+		};
+	};
+
+	/* 2 GB SKU; lk fixes this up from the real DRAM map */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x0 0x80000000>;
+	};
+
+	/*
+	 * Inherit the framebuffer the stock lk set up (logo is already on the
+	 * panel and the DSI link is still running): gives fbcon on screen with
+	 * no DSI/DISP driver at all. CONFIG_DRM_SIMPLEDRM binds on the
+	 * "simple-framebuffer" compatible. reg = one visible buffer
+	 * (stride*height = 4352*1920 = 0x7f8000). If colours come out wrong,
+	 * only the "format" string is wrong (never a hang) - see README.md.
+	 */
+	framebuffer0: framebuffer@9e220000 {
+		compatible = "simple-framebuffer";
+		reg = <0x0 0x9e220000 0x0 0x007f8000>;
+		memory-region = <&fb_reserved>;
+		width = <1080>;
+		height = <1920>;
+		stride = <4352>;
+		format = "a8r8g8b8";
+	};
+
+	/*
+	 * eMMC rails. No PMIC/regulator driver yet (M5), and the real
+	 * MT6351 VEMC/VIO18 are left on by lk. Model them as fixed always-on
+	 * regulators so the MMC core gets a valid OCR window (vmmc) and the
+	 * signalling voltage (vqmmc) and can bring the eMMC up.
+	 */
+	vemc_3v3: regulator-vemc {
+		compatible = "regulator-fixed";
+		regulator-name = "vemc_3v3";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	vio18: regulator-vio18 {
+		compatible = "regulator-fixed";
+		regulator-name = "vio18";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
 	};
 };
 
 &uart0 {
 	status = "okay";
 };
+
+&pio {
+	/* eMMC pins GPIO178-189, MSDC0 function = mode 1 */
+	mmc0_pins_default: mmc0-default-pins {
+		pins-cmd-dat {
+			pinmux = <(MTK_PIN_NO(178) | 1)>, <(MTK_PIN_NO(180) | 1)>,
+				 <(MTK_PIN_NO(181) | 1)>, <(MTK_PIN_NO(182) | 1)>,
+				 <(MTK_PIN_NO(183) | 1)>, <(MTK_PIN_NO(184) | 1)>,
+				 <(MTK_PIN_NO(186) | 1)>, <(MTK_PIN_NO(187) | 1)>,
+				 <(MTK_PIN_NO(188) | 1)>;
+			input-enable;
+			bias-pull-up;
+		};
+		pins-clk {
+			pinmux = <(MTK_PIN_NO(179) | 1)>;
+			bias-pull-down;
+		};
+		pins-rst {
+			pinmux = <(MTK_PIN_NO(185) | 1)>;
+			bias-pull-up;
+		};
+	};
+	/*
+	 * I2C0 pads. VERIFIED-FROM-STOCK (m681 DCT via the 3.18 port,
+	 * meizu_m681.dts:282-299 gpio92/gpio93 nodes): GPIO92 = SDA0,
+	 * GPIO93 = SCL0, both function mode 1 (pinctrl-mtk-mt6755.h:969/976
+	 * agrees). Without this pinmux the controller runs but every
+	 * transfer ends in ACKERR — the 3.18 port's full 7-bit scan found
+	 * 0 ACKs until these pads were switched to mode 1 (meizu_m681.dts:
+	 * 272-281 annotation). bias-disable: the bus has external pull-ups
+	 * (the stock DCT config disables the internal pull).
+	 */
+	i2c0_pins: i2c0-pins {
+		pins-bus {
+			pinmux = <(MTK_PIN_NO(92) | 1)>,
+				 <(MTK_PIN_NO(93) | 1)>;
+			/*
+			 * r71: internal pull-ups ON. The bus reads idle-high but
+			 * transfers are flaky (-110/-6 mix on the GT9xx), and the
+			 * stock FORGE ft5436 bring-up explicitly enabled the
+			 * internal pulls on SDA/SCL (mt_set_gpio_pull_enable) —
+			 * the external pulls alone are too weak for reliable
+			 * rise times.
+			 */
+			bias-pull-up;
+			/*
+			 * IES (input-enable) is load-bearing: with the pad's
+			 * input path gated the controller samples its own
+			 * driven SDA as constant 0, so EVERY address "ACKs"
+			 * and every read returns 0x00 (r68 live scan: all 112
+			 * addresses ACK; TPS65132/touch regs all-zero). LK's
+			 * DWS default leaves IES off here — even the stock
+			 * FORGE-patched ft5436 driver had to poke the
+			 * SDA0/SCL0 pad setup by hand. SMT per stock pad
+			 * config for bus inputs.
+			 */
+			input-enable;
+			input-schmitt-enable;
+		};
+	};
+
+	/*
+	 * Touch panel INT/RST. VERIFIED-FROM-STOCK (stock wt6755_66_sz_l.dts:
+	 * 152-243 + m681 cust_gpio_usage.h): INT = GPIO1 (EINT1), RST = GPIO10,
+	 * both GPIO mode 0. Stock eint pin config: input, bias-disable
+	 * (ctp_pins_eint_as_int); stock rst pin config: bias-pull-up
+	 * (ctp_pins_rst_output*). NOTE the m6 donor used RST = GPIO42; the
+	 * m681 DCT moved it to GPIO10.
+	 *
+	 * input-schmitt-enable is load-bearing: in pinctrl-paris,
+	 * "input-enable" only sets IES, it does NOT touch GPIO_DIR; the
+	 * SCHMITT case is the one that writes DIR=input (+SMT). DIR must
+	 * already read input when edt-ft5x06 requests the EINT, because
+	 * gpiochip_lock_as_irq() rejects output pins with -EIO before
+	 * mtk_xt_set_gpio_as_eint() would have fixed the direction.
+	 */
+	ctp_pins: ctp-pins {
+		pins-int {
+			pinmux = <(MTK_PIN_NO(1) | 0)>;
+			input-enable;
+			input-schmitt-enable;
+			bias-disable;
+		};
+		pins-rst {
+			pinmux = <(MTK_PIN_NO(10) | 0)>;
+			bias-pull-up;
+		};
+	};
+
+	/*
+	 * MT6351 PMIC nIRQ = GPIO150/EINT150. Force GPIO150 to input so the
+	 * mt6397-core MFD's request_threaded_irq (EINT150) succeeds: with the
+	 * corrected pinctrl base the eint gpiochip_lock_as_irq now reads real
+	 * directions and rejects an OUTPUT pin with -EIO, which aborts the whole
+	 * MFD probe (mt6397-core.c:37-42) -> no mt6351 regulators -> touch (and
+	 * everything) loses its vldo28/vio18 suppliers. input-enable sets
+	 * DIR=input on paris (pinctrl-paris.c mtk_pinconf_set INPUT_ENABLE).
+	 */
+	pmic_int_pins: pmic-int-pins {
+		pins-int {
+			pinmux = <(MTK_PIN_NO(150) | 0)>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+
+	mmc0_pins_uhs: mmc0-uhs-pins {
+		pins-cmd-dat {
+			pinmux = <(MTK_PIN_NO(178) | 1)>, <(MTK_PIN_NO(180) | 1)>,
+				 <(MTK_PIN_NO(181) | 1)>, <(MTK_PIN_NO(182) | 1)>,
+				 <(MTK_PIN_NO(183) | 1)>, <(MTK_PIN_NO(184) | 1)>,
+				 <(MTK_PIN_NO(186) | 1)>, <(MTK_PIN_NO(187) | 1)>,
+				 <(MTK_PIN_NO(188) | 1)>;
+			input-enable;
+			bias-pull-up;
+		};
+		pins-clk {
+			pinmux = <(MTK_PIN_NO(179) | 1)>;
+			bias-pull-down;
+		};
+		pins-rst {
+			pinmux = <(MTK_PIN_NO(185) | 1)>;
+			bias-pull-up;
+		};
+	};
+};
+
+&mmc0 {
+	/*
+	 * eMMC. No PMIC yet (M5), so no vmmc/vqmmc supplies — mtk-sd
+	 * tolerates their absence and relies on the rails lk left on.
+	 * Conservative: high-speed only, no hs200/hs400, no tuning.
+	 */
+	pinctrl-names = "default", "state_uhs";
+	pinctrl-0 = <&mmc0_pins_default>;
+	pinctrl-1 = <&mmc0_pins_uhs>;
+	vmmc-supply = <&vemc_3v3>;
+	vqmmc-supply = <&vio18>;
+	bus-width = <8>;
+	max-frequency = <52000000>;
+	cap-mmc-highspeed;
+	non-removable;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};
+
+/*
+ * Touch panel — FocalTech FT5x46 on i2c0 @ 0x38.
+ *
+ * FACT (verified live on THIS unit during the 3.18 port, recorded in stock
+ * meizu_m681.dts:334-337 / wt6755_66_sz_l.dts:152-153): the stock Flyme DTB
+ * claims Goodix GT9xx@0x5d, but this unit's panel answers at 0x38 with
+ * FocalTech chip-id reg 0xA3 = 0x54 ("FT5x46"), vendor reg 0xA8 = 0x80; the
+ * Goodix driver no-ACKed at 0x5d forever. Meizu shipped two touch sources for
+ * the m681 (stock ft5436 driver carries FT5346_M91_*_LCD00/LCD01 firmware for
+ * two LCD vendors); other units may really carry the GT9xx.
+ *
+ * Wiring, VERIFIED-FROM-STOCK (wt6755_66_sz_l.dts:152-243, TPD_I2C_NUMBER=0
+ * in tpd_custom_fts.h:51): bus i2c0, INT = GPIO1/EINT1 falling edge
+ * (stock interrupts = <1 2>), RST = GPIO10 (active-low FT reset), VDD =
+ * PMIC VLDO28 2.8 V (stock vtouch-supply = ldo_vldo28; lk leaves it OFF so
+ * the driver must enable it). IOVCC is not separately wired in stock (tpd
+ * only manages vtouch) — presumed strapped to an always-on 1.8 V rail; the
+ * absent iovcc-supply resolves to the dummy regulator.
+ *
+ * "focaltech,ft5426" binds edt-ft5x06.c's edt_ft5506_data (generic FocalTech
+ * M09-protocol path) — the FT5346/FT5436/FT5x46 family speaks the same
+ * touch-data protocol (registers 0x00-0x3E, 6 bytes/point).
+ *
+ * touchscreen-size 1080x1920: the chip outputs display-space coordinates
+ * (stock Flyme DTB tpd-resolution = <1080 1920>).
+ *
+ * HYPOTHESIS (verify on device, see BRINGUP_STATE_PMOS.md): NO
+ * touchscreen-inverted-x/y needed. The stock tpd driver reports raw chip
+ * coords which matched the stock (panel-native, 180°-rotated-vs-chassis)
+ * framebuffer, i.e. the touch matrix origin follows the panel scan origin.
+ * The panel node advertises rotation = <180> (DRM panel orientation), and a
+ * panel-orientation-aware compositor (Phosh/mutter) rotates BOTH the output
+ * and the mapped touch input, so raw coords must stay panel-native. If raw
+ * evtest shows chassis-correct (not inverted) coords instead, add
+ * touchscreen-inverted-x + touchscreen-inverted-y here.
+ */
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins>;
+	/* r71: 100 kHz until the bus is proven reliable at 400 k */
+	clock-frequency = <100000>;
+	status = "okay";
+
+	/*
+	 * r70: the m681 touch is a GOODIX GT9xx at 0x5d, NOT a FocalTech at
+	 * 0x38. Ground truth: the 3.18 port's own annotation (meizu_m681.dts:
+	 * 166-179 "GT9xx chip unpowered -> i2c no-ACK at 0x5d") — the
+	 * ft5x26@0x38 node there was carried over from the M6 DONOR as "the
+	 * m6-proven default", never verified on m681. With the i2c0 pads
+	 * finally real (r69 IES fix: empties NAK, lines idle-high), 0x38
+	 * NAKs even while powered — there is no FocalTech on this board.
+	 * The goodix driver drives INT low during reset release to strap
+	 * address 0x5d (raw levels -> both gpios GPIO_ACTIVE_HIGH).
+	 */
+	touchscreen@5d {
+		compatible = "goodix,gt911";
+		reg = <0x5d>;
+		interrupt-parent = <&pio>;
+		interrupts = <1 IRQ_TYPE_EDGE_FALLING>;
+		irq-gpios = <&pio 1 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pio 10 GPIO_ACTIVE_HIGH>;
+		AVDD28-supply = <&mt6351_vldo28>;
+		VDDIO-supply = <&mt6351_vio18>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ctp_pins>;
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <1920>;
+	};
+
+	/*
+	 * LCD bias: a real TPS65132 at 0x3e on THIS bus — live-verified
+	 * (r84): VPOS/VNEG read back 0x0f/0x0f (±5.5 V, exactly what LK
+	 * programs in lcm_init_power) and APPS reads 0x33. The m6-donor
+	 * 3.18 DTS placed i2c_lcd_bias@3e on the shared touch bus (i2c1
+	 * there); on m681 that shared bus is i2c0.
+	 *
+	 * This replaces the r60-era fixed-regulator stubs on GPIO12/GPIO7:
+	 * stock power-cycles the bias on every suspend/resume (EN2 then
+	 * EN1 low; re-programs 0x00/0x01 = 0x0F and re-raises the ENs on
+	 * resume) — with the real driver, regulator_disable in the panel's
+	 * unprepare now truly cuts the rails the way stock does, instead
+	 * of holding AVDD/AVEE up through reset/sleep-in forever
+	 * (always-on was a workaround for the r60 broken DSI command path).
+	 */
+	tps65132@3e {
+		compatible = "ti,tps65132";
+		reg = <0x3e>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&lcd_bias_enp_pin>, <&lcd_bias_enn_pin>;
+
+		lcd_vsp: outp {
+			regulator-name = "lcd_vsp";
+			regulator-min-microvolt = <5500000>;
+			regulator-max-microvolt = <5500000>;
+			enable-gpios = <&pio 12 GPIO_ACTIVE_HIGH>;
+			regulator-active-discharge = <1>;
+			regulator-boot-on;
+		};
+
+		lcd_vsn: outn {
+			regulator-name = "lcd_vsn";
+			regulator-min-microvolt = <5500000>;
+			regulator-max-microvolt = <5500000>;
+			enable-gpios = <&pio 7 GPIO_ACTIVE_HIGH>;
+			regulator-active-discharge = <1>;
+			regulator-boot-on;
+		};
+	};
+};
+
+/*
+ * r85: bring up the remaining i2c buses for the peripheral campaign.
+ * Dedicated-pad clusters, all mode 1 (pinctrl-mtk-mt6755.h):
+ * i2c1 = SDA1/SCL1 on 91/94 (same pad cluster as the proven i2c0 92/93),
+ * i2c2 = SCL2/SDA2 on 112/113 (stock sensor bus),
+ * i2c3 = SCL_APPM/SDA_APPM on 47/48 (stock hangs the MT6311 Vproc buck here).
+ * No clock-frequency: 100 kHz default like i2c0 until proven.
+ */
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins>;
+	status = "okay";
+
+	/*
+	 * Motion sensor — live-verified on this bus (r94): WHO_AM_I(0x75)
+	 * reads 0xAE = InvenSense ICM20608-D (the stock "mpu6515" cust dir
+	 * is mislabelled; the actual part answers 0xAE). AD0 strapped high
+	 * -> address 0x69. power_id=0xffff in stock = no switchable LDO, so
+	 * VDD is an always-on rail (no supply node needed). Mainline
+	 * inv_mpu6050 binds "invensense,icm20608d" directly -> accel+gyro
+	 * in /sys/bus/iio with zero driver work.
+	 */
+	imu@69 {
+		compatible = "invensense,icm20608d";
+		reg = <0x69>;
+	};
+};
+
+&i2c2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2_pins>;
+	status = "okay";
+};
+
+&i2c3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c3_pins>;
+	status = "okay";
+
+	/*
+	 * MT6311: the external Vproc buck feeding BOTH CPU clusters
+	 * (stock mt_cpufreq set_cur_volt_extbuck -> mt6311 VDVFS11;
+	 * stock DT hangs mediatek,ext_buck@6b off this appm bus).
+	 * always-on: this is the live CPU rail — it must never be
+	 * swept by the unused-regulator cleanup.
+	 */
+	mt6311: regulator@6b {
+		compatible = "mediatek,mt6311-regulator";
+		reg = <0x6b>;
+
+		regulators {
+			mt6311_vdvfs: VDVFS {
+				regulator-name = "vdvfs";
+				/* stock DVFS envelope: 0.8 V .. 1.15 V */
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <1150000>;
+				regulator-ramp-delay = <10000>;
+				regulator-always-on;
+				regulator-boot-on;
+			};
+		};
+	};
+};
+
+/*
+ * Hardware keys — VERIFIED-FROM-STOCK (3.18 meizu_m681.dts:303-316 +
+ * cust_kpd.dtsi): kpd-hw-init-map puts VOLUMEDOWN(114) at matrix pos 0
+ * and VOLUMEUP(115) at pos 1; kpd-hw-pwrkey = 8, kpd-hw-rstkey = 17
+ * (sw codes 116=KEY_POWER, 102=KEY_HOME). mt6779-keypad single-group
+ * math: row = pos / 9, col = pos % 9 -> pos0=(0,0), pos1=(0,1),
+ * pos8=(0,8), pos17=(1,8). Stock debounce 1024/32k ticks = 32 ms.
+ */
+&keypad {
+	pinctrl-names = "default";
+	pinctrl-0 = <&kpd_pins>;
+	keypad,num-rows = <2>;
+	keypad,num-columns = <9>;
+	linux,keymap = <MATRIX_KEY(0, 0, KEY_VOLUMEDOWN)
+			MATRIX_KEY(0, 1, KEY_VOLUMEUP)
+			MATRIX_KEY(0, 8, KEY_POWER)
+			MATRIX_KEY(1, 8, KEY_HOME)>;
+	mediatek,keys-per-group = <1>;
+	mediatek,debounce-us = <32000>;
+	wakeup-source;
+	status = "okay";
+};
+
+&pwm0 {
+	/*
+	 * disppwm_sel reset/LK state is idx3 = osc_d8 (ULPOSC), which our
+	 * clk driver models with rate 0 — the PWM period math needs a real
+	 * rate, so repoint the mux to univpll2_d4 (104 MHz).
+	 */
+	assigned-clocks = <&topckgen CLK_TOP_MUX_DISPPWM>;
+	assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL2_D4>;
+	status = "okay";
+};
+
+&ssusb {
+	/*
+	 * The mt6755-mtu3 driver quirk powers up the SSUSB IP + U2 port
+	 * before PHY init (mt6755 has no USB power-domain), fixing the
+	 * analog-tphy bus hang. Enabled with &usb3phy for the v15 test.
+	 */
+	dr_mode = "peripheral";
+	/*
+	 * m681's T-PHY exposes only a USB2 port (usb2port0); there is no USB3
+	 * PHY. Without capping, mtu3 reads the IP's U3 capability and advertises
+	 * super-speed-plus ("gadget (super-speed-plus) pullup D+"), enabling the
+	 * SS path that has no PHY — the host then never enumerates the device
+	 * (no RNDIS/NCM appears). Cap to high-speed so the gadget uses the USB2
+	 * T-PHY and enumerates over D+/D-.
+	 */
+	maximum-speed = "high-speed";
+	status = "okay";
+};
+
+&usb3phy {
+	status = "okay";
+};
+
+&usb2port0 {
+	/*
+	 * Meizu m681 USB2 eye tuning, copied from the stock 3.18 PHY driver
+	 * (mu3phy/mt6755/mtk-phy-asic.c phy_init_soc(), Meizu-added tail):
+	 * RG_USB20_VRT_VREF_SEL = 7, RG_USB20_TERM_VREF_SEL = 7. discth 0xF
+	 * is the stock host-disconnect threshold (usb_phy_recover(); only
+	 * matters in host mode, harmless as peripheral). Not required for
+	 * enumeration — signal-quality tuning only.
+	 */
+	mediatek,eye-vrt = <7>;
+	mediatek,eye-term = <7>;
+	mediatek,discth = <0xf>;
+};
+
+/*
+ * m681 (Meizu M3 Note) board-level display fragment — merge into
+ * arch/arm64/boot/dts/mediatek/mt6755-meizu-m681.dts.
+ *
+ * GPIO facts, VERIFIED-FROM-STOCK via the m681 DCT sheet
+ * (meizuosc-m681-stockdisplay-20260429/drivers/misc/mediatek/mach/mt6755/
+ *  wt6755_66_sz_l/dct/dct/codegen.dws, decoded with tools/dct/DrvGen):
+ *   GPIO_LCM_RST          = GPIO158 (dedicated LCM_RST pad, GPIO mode 0)
+ *   GPIO_LCD_BIAS_ENP_PIN = GPIO12  (mode 0)
+ *   GPIO_LCD_BIAS_ENN_PIN = GPIO7   (mode 0)
+ * GPIO158-as-reset additionally confirmed by stock 3.10 videox/debug.c:454
+ * (mt_set_gpio_* on GPIO158 for lcm reset).
+ *
+ * Bias chip: TI TPS65132 (dual ±5V-class LCD bias), I2C addr 0x3E.
+ *   Stock writes reg 0x00=0x0F (VPOS) and 0x01=0x0F (VNEG) each boot
+ *   ([LCM-3.10] lcm_init_power; LK does the same before the kernel runs).
+ * STAGE-1 SIMPLIFICATION: there is no mainline i2c node for mt6755 yet, so
+ * the TPS65132 DAC setting is inherited from LK (it programs 0x0F/0x0F on
+ * every boot and the chip keeps register state while VIN stays up).  We
+ * only toggle ENP/ENN via fixed regulators.  Stage-4: add the i2c
+ * controller + mainline tps65132 regulator driver
+ * (drivers/regulator/tps65132-regulator.c) and replace these stubs.
+ * NOTE bus contradiction to verify on hardware: the m681 DCT cust_i2c says
+ * I2C_I2C_LCD_BIAS_CHANNEL = channel 0 @0x3E, but Meizu's 3.18 dts placed
+ * i2c_lcd_bias@3e under &i2c1 (meizu_m681.dts:361).
+ */
+
+/ {
+	/*
+	 * Backlight via DISP_PWM0 (r85): stock drives the WLED driver with
+	 * the BLS/DISP_PWM block (disp_bls_set_backlight, max level 1023);
+	 * LK muxes the pad and leaves the PWM running at full duty, so no
+	 * pinctrl is needed — the kernel driver just takes over EN/duty.
+	 * 40 us period (25 kHz) — above audible/flicker range, plenty of
+	 * resolution from the 104 MHz main clock.
+	 */
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm0 0 40000>;
+		num-interpolated-steps = <64>;
+		default-brightness-level = <40>;
+	};
+
+	/*
+	 * Vibrator: the coin motor hangs directly off the MT6351 VIBR LDO
+	 * (3.0 V load switch, live-verified present in the regulator list);
+	 * regulator-haptic gives it an input ff device.
+	 */
+	vibrator {
+		compatible = "regulator-haptic";
+		haptic-supply = <&mt6351_vibr>;
+		max-microvolt = <3000000>;
+		min-microvolt = <3000000>;
+	};
+};
+
+&pio {
+	/*
+	 * All three pins in GPIO mode 0 (stock cust_gpio_usage.h:
+	 * *_M_GPIO = GPIO_MODE_00). MTK_PIN_NO(x)|0 = mode 0.
+	 */
+	lcm_rst_pin: lcm-rst-pin {
+		pins-rst {
+			pinmux = <(MTK_PIN_NO(158) | 0)>;
+			output-high;
+		};
+	};
+	/*
+	 * ENP/ENN park HIGH, not low: the TPS65132 shuts down (and NAKs on
+	 * i2c!) when both ENs are low, and LK hands the kernel a lit panel
+	 * with both high. output-low here was an r60-era artifact that only
+	 * worked because the fixed-regulator stubs immediately re-raised the
+	 * pins; with the real tps65132 driver the pinctrl killed the chip
+	 * before its probe could talk to it (r84 first spin: -ENXIO).
+	 * Actual on/off control belongs to the regulator enable-gpios.
+	 */
+	/*
+	 * Keypad matrix pads — dedicated KP cluster (pinctrl-mtk-mt6755.h):
+	 * 102=KPROW0, 103=KPCOL0, 104=KPCOL1, all mode 1. The volume keys
+	 * are the only REAL matrix keys on this board (pos0/pos1 = row0 x
+	 * col0/col1); rows are driven by the block, columns are inputs.
+	 * Electrical defaults (IES/PUPD) come from the r69 stock truth
+	 * tables; only the mode needs setting — LK leaves these pads in
+	 * GPIO mode on the kernel handoff.
+	 */
+	kpd_pins: kpd-pins {
+		pins-cols {
+			pinmux = <(MTK_PIN_NO(103) | 1)>,
+				 <(MTK_PIN_NO(104) | 1)>;
+			input-enable;
+			bias-pull-up;
+		};
+		pins-rows {
+			pinmux = <(MTK_PIN_NO(102) | 1)>;
+		};
+	};
+	i2c1_pins: i2c1-pins {
+		pins-bus {
+			pinmux = <(MTK_PIN_NO(91) | 1)>,
+				 <(MTK_PIN_NO(94) | 1)>;
+			bias-pull-up;
+		};
+	};
+	i2c2_pins: i2c2-pins {
+		pins-bus {
+			pinmux = <(MTK_PIN_NO(112) | 1)>,
+				 <(MTK_PIN_NO(113) | 1)>;
+			bias-pull-up;
+		};
+	};
+	i2c3_pins: i2c3-pins {
+		pins-bus {
+			pinmux = <(MTK_PIN_NO(47) | 1)>,
+				 <(MTK_PIN_NO(48) | 1)>;
+			bias-pull-up;
+		};
+	};
+	lcd_bias_enp_pin: lcd-bias-enp-pin {
+		pins-enp {
+			pinmux = <(MTK_PIN_NO(12) | 0)>;
+			output-high;
+		};
+	};
+	lcd_bias_enn_pin: lcd-bias-enn-pin {
+		pins-enn {
+			pinmux = <(MTK_PIN_NO(7) | 0)>;
+			output-high;
+		};
+	};
+};
+
+&mipi_tx0 {
+	status = "okay";
+};
+
+&dsi0 {
+	status = "okay";
+	/*
+	 * r79: stock link rate. LK/stock run this panel at PLL_CLOCK 480 MHz =
+	 * 960 Mbps/lane BURST; the upstream computed minimum (~870) plus the
+	 * upstream blanking math left the DDIC without timing margin (bars).
+	 */
+	mediatek,data-rate = <960000000>;
+
+	/*
+	 * mtk_dsi_host_attach() resolves the downstream panel/bridge via the
+	 * OF graph: devm_drm_of_get_bridge(dsi_np, port=1, ep=0). Without this
+	 * ports{} graph it returns -ENODEV -> mipi_dsi_attach fails -> the whole
+	 * mtk-drm component bind aborts -> no vblank consumer -> the LK-left OVL
+	 * IRQ storms ("irq 242 nobody cared") and wedges the box. Wire the DSI
+	 * output (port@1) to the panel. (The DDP input side is not an OF-graph
+	 * edge on mt6755 — mtk-drm uses the hardcoded MMSYS route table.)
+	 */
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+			dsi0_out: endpoint {
+				remote-endpoint = <&panel_in>;
+			};
+		};
+	};
+
+	panel@0 {
+		compatible = "txd,ili9885", "ilitek,ili9885";
+		reg = <0>;
+		/*
+		 * Panel is mounted upside down in the chassis, but the 180°
+		 * correction is done in the OVL hardware (&ovl0 mediatek,rotate-180)
+		 * so it applies to BOTH fbcon and phosh/wlroots. We deliberately do
+		 * NOT set "rotation = <180>" here: that only drives the DRM
+		 * panel-orientation property, which fbcon honours (SW rotate) but
+		 * phosh ignores — and together with the OVL flip it would
+		 * double-rotate the console. See mtk_disp_ovl.c.
+		 */
+		/*
+		 * reset-gpios RESTORED (r74). It was removed in r60 because the
+		 * kernel could not re-init the panel over DSI back then (cmd-mode
+		 * switch timed out, DCS -62) so a real reset pulse was fatal. The
+		 * DSI command path has since been fixed for real (r63 force-cmd-mode
+		 * on poweron, r64 polled DSI_INTSTA waits, r73 true PLL rates), so
+		 * the driver now runs the full stock power-on: reset waveform +
+		 * byte-exact init table — the panel no longer depends on the LK
+		 * scanout and survives unprepare/prepare cycles (screen blank/wake,
+		 * compositor restarts), which the LK-inherited state never did.
+		 */
+		/*
+		 * r79: full stock cold power-on restored (reset + generic-typed
+		 * init + stock video WCs + stock 960 Mbps link). r78 proved the
+		 * garbage tracks the VIDEO parameters, not the warm/cold panel
+		 * state (bars persisted over an LK-warm panel with the init
+		 * correctly applied and the touch rail physically off).
+		 */
+		reset-gpios = <&pio 158 GPIO_ACTIVE_HIGH>;
+		vsp-supply = <&lcd_vsp>;
+		vsn-supply = <&lcd_vsn>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&lcm_rst_pin>;
+		backlight = <&backlight>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
+};
+
+/*
+ * Correct the 180° panel mounting in the OVL hardware (HORZ+VIRT flip) so both
+ * fbcon and phosh/wlroots come out upright without any userspace config. This
+ * is the m681-only path (gated by the property) because the panel cannot be
+ * re-inited over DSI (LK owns the panel; kernel cmd-mode times out) and phosh
+ * ignores the DRM panel-orientation property. See mtk_disp_ovl.c.
+ */
+&ovl0 {
+	mediatek,rotate-180;
+};
+
+/*
+ * Reminder (cmdline, not DTS): current chosen/bootargs in mt6755.dtsi carries
+ * "clk_ignore_unused"; for display bring-up also add "pd_ignore_unused" so
+ * the genpd late cleanup cannot power off the DISP MTCMOS between scpsys
+ * probe and mtk-drm bind while the deferral chain settles.
+ * Also add "cma=64M" (no IOMMU: 1080x1920x4 ≈ 8.3 MiB per scanout buffer,
+ * GEM dumb buffers must be physically contiguous).
+ */
+
+/*
+ * Apply the PMIC nIRQ (GPIO150) input config at the mt6351 device's probe,
+ * before mt6397-core requests EINT150 — otherwise the MFD probe aborts and no
+ * regulators register. See pmic_int_pins / &pio above.
+ */
+&pmic {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pmic_int_pins>;
+};
+
+/*
+ * cpufreq (r86): stock FY-bin OPP tables (mt_cpufreq.c opp_tbl_little_e1_0
+ * :586-595 / opp_tbl_big_e1_0 :610-619; volts are OP()*10 uV, ladder
+ * :353-354). Vproc = MT6311 VDVFS (shared by both clusters), Vsram =
+ * MT6351 vsram-proc with +100 mV tracking — exactly the mainline
+ * mediatek-cpufreq tracking model.
+ *
+ * Intermediate clocks (the mux input parked on while ARMPLL reprograms):
+ * BIG uses mainpll (1092 MHz < its 1807 max opp). LITTLE can NOT use
+ * mainpll — 1092 exceeds its 1001 MHz top opp and the driver's
+ * find_freq_ceil(inter_rate) would fail — so it parks on clk26m; the
+ * few-µs dip to 26 MHz per transition is harmless and needs no voltage.
+ */
+/ {
+	cluster0_opp: opp-table-cluster0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+		opp-156000000 { opp-hz = /bits/ 64 <156000000>; opp-microvolt = <800000>; };
+		opp-338000000 { opp-hz = /bits/ 64 <338000000>; opp-microvolt = <900000>; };
+		opp-494000000 { opp-hz = /bits/ 64 <494000000>; opp-microvolt = <937500>; };
+		opp-598000000 { opp-hz = /bits/ 64 <598000000>; opp-microvolt = <968750>; };
+		opp-689000000 { opp-hz = /bits/ 64 <689000000>; opp-microvolt = <1000000>; };
+		opp-819000000 { opp-hz = /bits/ 64 <819000000>; opp-microvolt = <1075000>; };
+		opp-910000000 { opp-hz = /bits/ 64 <910000000>; opp-microvolt = <1112500>; };
+		opp-1001000000 { opp-hz = /bits/ 64 <1001000000>; opp-microvolt = <1150000>; };
+	};
+
+	cluster1_opp: opp-table-cluster1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+		opp-286000000 { opp-hz = /bits/ 64 <286000000>; opp-microvolt = <800000>; };
+		opp-663000000 { opp-hz = /bits/ 64 <663000000>; opp-microvolt = <900000>; };
+		opp-871000000 { opp-hz = /bits/ 64 <871000000>; opp-microvolt = <937500>; };
+		opp-1027000000 { opp-hz = /bits/ 64 <1027000000>; opp-microvolt = <968750>; };
+		opp-1196000000 { opp-hz = /bits/ 64 <1196000000>; opp-microvolt = <1000000>; };
+		opp-1495000000 { opp-hz = /bits/ 64 <1495000000>; opp-microvolt = <1075000>; };
+		opp-1651000000 { opp-hz = /bits/ 64 <1651000000>; opp-microvolt = <1112500>; };
+		opp-1807000000 { opp-hz = /bits/ 64 <1807000000>; opp-microvolt = <1150000>; };
+	};
+};
+
+/*
+ * r88: CPU cpufreq wiring REMOVED (was &cpu0..7 clocks/opp/supplies).
+ * The r86/r87 flights proved the DVFS plumbing end-to-end (policy,
+ * schedutil, MT6311 Vproc 0.8-1.15 V with Vsram tracking) EXCEPT the
+ * final silicon step: writes to the ARM PLL PCW field never latch
+ * (CON1 reads back postdiv-only, PCW=0), so the cluster ended up on
+ * the 26 MHz intermediate/garbage VCO instead of the target rate —
+ * a comatose phone. Until the PCW write path is understood (FHCTL
+ * HP_EN was already 0; suspect a secure-world protection or a
+ * different DDS latch sequence on this silicon), the CPUs stay on
+ * LK's stable 689/806 MHz. The OPP tables above are kept as the
+ * verified stock reference for the next attempt; the MT6311 node
+ * stays (harmless, always-on rail).
+ */

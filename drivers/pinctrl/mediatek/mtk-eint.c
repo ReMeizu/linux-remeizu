@@ -272,16 +272,29 @@ static int mtk_eint_irq_request_resources(struct irq_data *d)
 		return err;
 	}
 
+	/*
+	 * Switch the pad to EINT mode (mux to the eint function + DIR=input +
+	 * schmitt) BEFORE locking it as an IRQ. m681/MT6755 hands several EINT
+	 * pads over as OUTPUT — the mt6351 PMIC nIRQ (EINT150, shared with the
+	 * AUD_DAT_MOSI pad) and the FT5x46 touch nIRQ (EINT1). With the pinctrl
+	 * reg bases corrected the DIR register now reads honestly, so the old
+	 * ordering hit gpiochip_lock_as_irq()'s "GPIO set as output" check and
+	 * returned -EIO, which aborted the mt6397 MFD probe (=> no mt6351
+	 * regulators => no touch VDD) and the touch EINT. set_gpio_as_eint()
+	 * writes DIR=input first; gpiochip_lock_as_irq() then re-reads the
+	 * direction (mtk gpio_chip is non-sleeping with .get_direction) and
+	 * passes.
+	 */
+	err = eint->gpio_xlate->set_gpio_as_eint(eint->pctl, d->hwirq);
+	if (err < 0) {
+		dev_err(eint->dev, "Can not eint mode\n");
+		return err;
+	}
+
 	err = gpiochip_lock_as_irq(gpio_c, gpio_n);
 	if (err < 0) {
 		dev_err(eint->dev, "unable to lock HW IRQ %lu for IRQ\n",
 			irqd_to_hwirq(d));
-		return err;
-	}
-
-	err = eint->gpio_xlate->set_gpio_as_eint(eint->pctl, d->hwirq);
-	if (err < 0) {
-		dev_err(eint->dev, "Can not eint mode\n");
 		return err;
 	}
 

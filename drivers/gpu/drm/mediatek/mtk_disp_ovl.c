@@ -165,6 +165,9 @@ struct mtk_disp_ovl {
 	const struct mtk_disp_ovl_data	*data;
 	void				(*vblank_cb)(void *data);
 	void				*vblank_cb_data;
+	bool				vblank_enabled;
+	int				irq;
+	bool				rotate_180;
 };
 
 static irqreturn_t mtk_disp_ovl_irq_handler(int irq, void *dev_id)
@@ -174,8 +177,20 @@ static irqreturn_t mtk_disp_ovl_irq_handler(int irq, void *dev_id)
 	/* Clear frame completion interrupt */
 	writel(0x0, priv->regs + DISP_REG_OVL_INTSTA);
 
-	if (!priv->vblank_cb)
-		return IRQ_NONE;
+	/*
+	 * m681 warm handoff: the OVL SPI-184 line is LEVEL_LOW and LK hands the
+	 * panel over still scanning out with the frame-complete INT enabled. Any
+	 * frame IRQ that arrives before the driver itself enables vblank
+	 * (mtk_ovl_enable_vblank at modeset) is the bootloader's — the CRTC/DDP
+	 * state it would feed to mtk_crtc_ddp_irq() is not set up yet, so acting
+	 * on it NULL-derefs (crtc->dev / mtk_crtc_ddp_config). Clearing INTSTA
+	 * does not deassert the LEVEL line, so mask INTEN at the source and
+	 * swallow the IRQ; mtk_ovl_enable_vblank() re-arms it when we are ready.
+	 */
+	if (!priv->vblank_enabled || !priv->vblank_cb) {
+		writel_relaxed(0x0, priv->regs + DISP_REG_OVL_INTEN);
+		return IRQ_HANDLED;
+	}
 
 	priv->vblank_cb(priv->vblank_cb_data);
 
@@ -204,6 +219,10 @@ void mtk_ovl_enable_vblank(struct device *dev)
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
 
+	if (!ovl->vblank_enabled) {
+		enable_irq(ovl->irq);
+		ovl->vblank_enabled = true;
+	}
 	writel(0x0, ovl->regs + DISP_REG_OVL_INTSTA);
 	writel_relaxed(OVL_FME_CPL_INT, ovl->regs + DISP_REG_OVL_INTEN);
 }
@@ -213,6 +232,11 @@ void mtk_ovl_disable_vblank(struct device *dev)
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
 
 	writel_relaxed(0x0, ovl->regs + DISP_REG_OVL_INTEN);
+	if (ovl->vblank_enabled) {
+		/* .disable_vblank runs under vbl_lock (atomic) -> _nosync */
+		disable_irq_nosync(ovl->irq);
+		ovl->vblank_enabled = false;
+	}
 }
 
 u32 mtk_ovl_get_blend_modes(struct device *dev)
@@ -501,6 +525,10 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 	unsigned int fmt = pending->format;
 	unsigned int rotation = pending->rotation;
 	unsigned int offset = (pending->y << 16) | pending->x;
+
+	/* m681: force a 180° hardware flip of the whole output (see probe). */
+	if (ovl->rotate_180)
+		rotation ^= DRM_MODE_ROTATE_180;
 	unsigned int src_size = (pending->height << 16) | pending->width;
 	unsigned int blend_mode = state->base.pixel_blend_mode;
 	unsigned int ignore_pixel_alpha = 0;
@@ -546,7 +574,19 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 
 	if (rotation & DRM_MODE_REFLECT_X) {
 		con |= OVL_CON_HORZ_FLIP;
-		addr += pending->pitch - 1;
+		/*
+		 * The horizontal flip makes the OVL scan each row right-to-left,
+		 * so it must start at the last *visible* pixel of the row. The
+		 * upstream `pitch - 1` assumes pitch == width * cpp; on m681 the
+		 * phoc/panfrost output buffer is stride-aligned (1080px -> 1088px,
+		 * pitch 4352 vs 4320), so pitch-1 lands 32 bytes into the padding
+		 * and every row shears -> gray stripes with the 180° flip active.
+		 * Use the real visible row width instead.
+		 */
+		if (state->base.fb)
+			addr += pending->width * state->base.fb->format->cpp[0] - 1;
+		else
+			addr += pending->pitch - 1;
 	}
 
 	if (ovl->data->supports_afbc)
@@ -640,10 +680,53 @@ static int mtk_disp_ovl_probe(struct platform_device *pdev)
 	priv->data = of_device_get_match_data(dev);
 	platform_set_drvdata(pdev, priv);
 
+	/*
+	 * m681: the ILI9885 panel is mounted 180° in the chassis. The kernel
+	 * cannot re-init it (DSI cmd-mode times out; LK's panel init carries the
+	 * scanout) so a panel MADCTL flip is not an option, and the compositor
+	 * (phosh/wlroots) ignores the DRM panel-orientation property. Flip the
+	 * whole output in the OVL hardware instead (HORZ+VIRT flip = 180) so
+	 * fbcon AND phosh come out upright without any userspace config. Gated by
+	 * a DT prop so this only affects m681, not other MediaTek boards sharing
+	 * this driver.
+	 */
+	priv->rotate_180 = of_property_read_bool(dev->of_node, "mediatek,rotate-180");
+
+	/*
+	 * Disable and clear any interrupt the bootloader left enabled. On m681
+	 * LK hands off with the OVL live (boot logo) and OVL_FME_CPL_INT set in
+	 * DISP_REG_OVL_INTEN; the frame-complete IRQ then fires the instant the
+	 * handler is hooked. Pre-bind (vblank_cb NULL) that is a "nobody cared"
+	 * storm; post-bind it calls mtk_crtc_ddp_irq() before the drm_device
+	 * dev_private is wired and NULL-derefs. Either way the box dies.
+	 *
+	 * The mask MUST run with the OVL clock enabled: LK's clock is gated by
+	 * the CCF before we probe, so a bare writel() lands on a dead bus and the
+	 * bootloader's INTEN survives (then the component bind re-enables the
+	 * clock and the stale INTEN fires). Bracket the mask with the clock.
+	 */
+	ret = clk_prepare_enable(priv->clk);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to enable ovl clk\n");
+	writel(0x0, priv->regs + DISP_REG_OVL_INTEN);
+	writel(0x0, priv->regs + DISP_REG_OVL_INTSTA);
+	clk_disable_unprepare(priv->clk);
+
 	ret = devm_request_irq(dev, irq, mtk_disp_ovl_irq_handler,
 			       IRQF_TRIGGER_NONE, dev_name(dev), priv);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to request irq %d\n", irq);
+
+	/*
+	 * m681 warm handoff: keep the OVL IRQ masked at the GIC until the driver
+	 * actually enables vblank. LK hands off with the OVL scanning and its
+	 * frame-complete INT set; clearing DISP_REG_OVL_INTEN does not deassert
+	 * the LEVEL_LOW SPI-184 line, so the handler would otherwise spin at
+	 * ~150k/s (wedging CPU0) or reach mtk_crtc_ddp_irq before the CRTC is
+	 * ready (NULL deref). mtk_ovl_enable_vblank() re-enables it at modeset.
+	 */
+	priv->irq = irq;
+	disable_irq(irq);
 
 	pm_runtime_enable(dev);
 

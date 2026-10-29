@@ -7,6 +7,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/arm-smccc.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/stddef.h>
@@ -278,6 +279,87 @@ u64 cpu_logical_map(unsigned int cpu)
 	return __cpu_logical_map[cpu];
 }
 
+/*
+ * Meizu m681 (MT6755) bring-up breadcrumbs: SPM_SW_RSV registers at
+ * 0x10006608/60c/610 survive watchdog resets and are read back from
+ * recovery (see m681-vgdn-decode-spm.sh). Stage 1 is written in head.S.
+ */
+static void __init m681_spm_mark(u32 stage)
+{
+	void __iomem *p = early_ioremap(0x10006608, 0x10);
+
+	if (!p)
+		return;
+	writel(0xf6810000 | stage, p);
+	writel(0x46524745, p + 8);	/* "FRGE" */
+	early_iounmap(p, 0x10);
+}
+
+/*
+ * Start the CPUXGPT so the ARMv8 system counter (CNTVCT) actually ticks.
+ * On MT6755 the CPUXGPT control registers (INDEX @ 0x10200674, DATA @
+ * 0x10200670) are secure: the stock mt_cpuxgpt.c reaches them via the
+ * MTK SiP call MTK_SIP_KERNEL_MCUSYS_WRITE (0x82000201), NOT plain MMIO
+ * — so the upstream mt6795-systimer (MMIO-only) can't enable the counter
+ * and timekeeping stays frozen at [0.000000], hanging the first initcall
+ * that sleeps. Reproduce the stock enable via SMC before time_init:
+ *   __write_cpuxgpt(INDEX_CTL_REG=0, EN_CPUXGPT=1)
+ * which is two indexed writes (set index, then data).
+ * Unimplemented SMC just returns an error in x0 — harmless.
+ */
+#define MTK_SIP_KERNEL_MCUSYS_WRITE	0x82000201
+static void __init m681_cpuxgpt_enable(void)
+{
+	struct arm_smccc_res res;
+
+	/* index := INDEX_CTL_REG (0) */
+	arm_smccc_smc(MTK_SIP_KERNEL_MCUSYS_WRITE, 0x10200674, 0x0, 0,
+		      0, 0, 0, 0, &res);
+	/* data := EN_CPUXGPT (1) */
+	arm_smccc_smc(MTK_SIP_KERNEL_MCUSYS_WRITE, 0x10200670, 0x1, 0,
+		      0, 0, 0, 0, &res);
+}
+
+/*
+ * lk hands over with the toprgu watchdog armed (~30s). Disarm it for
+ * bring-up so early hangs can be inspected instead of rebooting.
+ * WDT_MODE @ 0x10007000, write key 0x22 in the top byte, enables off.
+ */
+static void __init m681_wdt_disarm(void)
+{
+	void __iomem *p = early_ioremap(0x10007000, 0x10);
+
+	if (!p)
+		return;
+	writel(0x22000000, p);
+	early_iounmap(p, 0x10);
+}
+
+static void m681_spm_mark_late(u32 stage)
+{
+	void __iomem *p = ioremap(0x10006608, 0x10);
+
+	if (!p)
+		return;
+	writel(0xf6810000 | stage, p);
+	writel(0x46524745, p + 8);	/* "FRGE" */
+	iounmap(p);
+}
+
+static int __init m681_mark_early_initcall(void)
+{
+	m681_spm_mark_late(4);
+	return 0;
+}
+early_initcall(m681_mark_early_initcall);
+
+static int __init m681_mark_late_initcall(void)
+{
+	m681_spm_mark_late(5);
+	return 0;
+}
+late_initcall(m681_mark_late_initcall);
+
 void __init __no_sanitize_address setup_arch(char **cmdline_p)
 {
 	setup_initial_init_mm(_text, _etext, _edata, _end);
@@ -288,6 +370,10 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	early_fixmap_init();
 	early_ioremap_init();
+
+	m681_wdt_disarm();
+	m681_cpuxgpt_enable();
+	m681_spm_mark(2);
 
 	setup_machine_fdt(__fdt_pointer);
 
@@ -332,6 +418,8 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	arm64_memblock_init();
 
 	paging_init();
+
+	m681_spm_mark(3);
 
 	acpi_table_upgrade();
 

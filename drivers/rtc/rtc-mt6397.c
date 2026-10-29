@@ -262,9 +262,17 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 
 	rtc->data = of_device_get_match_data(&pdev->dev);
 
-	rtc->irq = platform_get_irq(pdev, 0);
-	if (rtc->irq < 0)
+	/*
+	 * The alarm IRQ arrives through the PMIC irq domain. Boards that do
+	 * not wire the PMIC nIRQ at all (Meizu m681: the MFD runs without an
+	 * interrupt) still have a perfectly usable timekeeping RTC — run
+	 * without alarms instead of failing the probe.
+	 */
+	rtc->irq = platform_get_irq_optional(pdev, 0);
+	if (rtc->irq == -EPROBE_DEFER)
 		return rtc->irq;
+	if (rtc->irq < 0)
+		rtc->irq = 0;
 
 	rtc->regmap = mt6397_chip->regmap;
 	mutex_init(&rtc->lock);
@@ -275,18 +283,20 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(rtc->rtc_dev))
 		return PTR_ERR(rtc->rtc_dev);
 
-	ret = devm_request_threaded_irq(&pdev->dev, rtc->irq, NULL,
-					mtk_rtc_irq_handler_thread,
-					IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
-					"mt6397-rtc", rtc);
-
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to request alarm IRQ: %d: %d\n",
-			rtc->irq, ret);
-		return ret;
+	if (rtc->irq) {
+		ret = devm_request_threaded_irq(&pdev->dev, rtc->irq, NULL,
+						mtk_rtc_irq_handler_thread,
+						IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
+						"mt6397-rtc", rtc);
+		if (ret) {
+			dev_err(&pdev->dev, "Failed to request alarm IRQ: %d: %d\n",
+				rtc->irq, ret);
+			return ret;
+		}
+		device_init_wakeup(&pdev->dev, true);
+	} else {
+		clear_bit(RTC_FEATURE_ALARM, rtc->rtc_dev->features);
 	}
-
-	device_init_wakeup(&pdev->dev, true);
 
 	rtc->rtc_dev->ops = &mtk_rtc_ops;
 	rtc->rtc_dev->range_min = RTC_TIMESTAMP_BEGIN_1900;
@@ -332,6 +342,7 @@ static const struct mtk_rtc_data mt6397_rtc_data = {
 
 static const struct of_device_id mt6397_rtc_of_match[] = {
 	{ .compatible = "mediatek,mt6323-rtc", .data = &mt6397_rtc_data },
+	{ .compatible = "mediatek,mt6351-rtc", .data = &mt6397_rtc_data },
 	{ .compatible = "mediatek,mt6357-rtc", .data = &mt6358_rtc_data },
 	{ .compatible = "mediatek,mt6358-rtc", .data = &mt6358_rtc_data },
 	{ .compatible = "mediatek,mt6397-rtc", .data = &mt6397_rtc_data },

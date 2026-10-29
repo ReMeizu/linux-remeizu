@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016 MediaTek Inc.
- * Author: Mars.C <mars.cheng@mediatek.com>
+ * Copyright (c) 2023 Arseniy Velikanov <adomerlee@gmail.com>
  */
 
-#include <dt-bindings/clock/mediatek,mt6755-clk.h>
+#include <dt-bindings/input/input.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/mediatek,mt6755-clk.h>
+#include <dt-bindings/phy/phy.h>
+#include <dt-bindings/power/mediatek,mt6755-power.h>
 
 / {
 	compatible = "mediatek,mt6755";
@@ -26,64 +29,94 @@
 		cpu0: cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x000>;
 		};
 
 		cpu1: cpu@1 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x001>;
 		};
 
 		cpu2: cpu@2 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x002>;
 		};
 
 		cpu3: cpu@3 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x003>;
 		};
 
 		cpu4: cpu@100 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x100>;
 		};
 
 		cpu5: cpu@101 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x101>;
 		};
 
 		cpu6: cpu@102 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x102>;
 		};
 
 		cpu7: cpu@103 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
-			enable-method = "psci";
+			enable-method = "mediatek,mt6755-smp";
 			reg = <0x103>;
 		};
 	};
 
-	clk26m: uart_clk: clock-26m {
-		compatible = "fixed-clock";
-		clock-frequency = <26000000>;
-		#clock-cells = <0>;
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/*
+		 * NOTE: /chosen/bootargs has to exist even if unused or
+		 * bootloader will be unhappy, also needs "bootopt=64S3,32N2,64N2"
+		 * on boot.img cmdline to boot 64-bit kernel (adding it here doesn't help)
+		 * maxcpus: the old "maxcpus=0" (single CPU) was needed because the
+		 * previous PSCI-only enable-method panicked on secondary bring-up
+		 * (BL31 arms the entrypoint but never powers the CPU MTCMOS domain).
+		 * With enable-method "mediatek,mt6755-smp" (PSCI CPU_ON + kernel-side
+		 * SPM MTCMOS power-on) secondaries can come up. Starting with
+		 * maxcpus=2 (CPU0+CPU1, cluster 0) as the first SMP bring-up test;
+		 * the effective cmdline normally comes from the boot.img anyway.
+		 * FIXME: without "initrd=..." initrd not fully accessible via the linear mapping
+		 * FIXME: drop clk_ignore_unused, keeps getting watchdog rebooted without it for now!
+		 */
+		bootargs = "maxcpus=2 initrd=0x45000000,0x1000000 clk_ignore_unused";
+	};
+
+	clocks {
+		clk26m: clk26m {
+			compatible = "fixed-clock";
+			clock-frequency = <26000000>;
+			#clock-cells = <0>;
+		};
+
+		system_clk: dummy13m {
+			compatible = "fixed-clock";
+			clock-frequency = <13000000>;
+			#clock-cells = <0>;
+		};
 	};
 
 	timer {
@@ -97,91 +130,938 @@
 			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
 			     <GIC_PPI 10
 			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+		/*
+		 * CNTFRQ_EL0 lies on this board: firmware programs it to 13 MHz,
+		 * but the counter really increments at 26 MHz, so every clock in
+		 * the system ran exactly 2x fast (measured live: CNTVCT delta over
+		 * a host-timed window = 26.000 MHz while CNTFRQ_EL0 reads 13000000).
+		 *
+		 * Why: the 26 MHz source reaches the arch counter through CPUXGPT,
+		 * whose CTL divider field (bits [10:8]) selects /1, /2 or /4 (stock
+		 * mt_cpuxgpt.h CLK_DIV1/2/4). The stock kernel halves it --
+		 * set_cpuxgpt_clk(CLK_DIV2) -- so the counter matches the 13 MHz
+		 * CNTFRQ the firmware advertises. We never do, and we cannot: those
+		 * registers are secure-only. Verified live -- an indexed write of
+		 * enable|CLK_DIV2 to 0x10200674/0x10200670 is silently swallowed and
+		 * the counter stays at 26 MHz (same secure-write behaviour as the
+		 * sysirq INT_POL bits).
+		 *
+		 * Declaring the true rate here is the mainline-sanctioned override
+		 * for exactly this case (arm_arch_timer.c:862 -- "clock-frequency
+		 * property overrides the HW register") and keeps the fix independent
+		 * of the secure world. The alternative -- an SMC that programs
+		 * CLK_DIV2 like stock -- would also work, but is not needed for
+		 * correct timekeeping and would only lower timer resolution.
+		 */
+		clock-frequency = <26000000>;
 	};
 
-	topckgen: clock-controller@10000000 {
-		compatible = "mediatek,mt6755-topckgen", "syscon";
-		reg = <0 0x10000000 0 0x1000>;
+	soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "simple-bus";
+		ranges;
+
+		topckgen: clock-controller@10000000 {
+			compatible = "mediatek,mt6755-topckgen", "mediatek,topckgen";
+			reg = <0 0x10000000 0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		infrasys: clock-controller@10001000 {
+			/*
+			 * "syscon" is required: the gate clocks are registered
+			 * through device_node_to_regmap(), which only succeeds
+			 * when the node is a syscon. Without it infrasys probe
+			 * fails (-ENOTSUPP) and every CLK_INFRA_* (msdc/uart/
+			 * usb/i2c bus gates) goes missing, deferring msdc0 etc.
+			 */
+			compatible = "mediatek,mt6755-infrasys", "syscon";
+			reg = <0 0x10001000 0 0x1000>;
+			#clock-cells = <1>;
+			#reset-cells = <1>;
+		};
+
+		apmixedsys: clock-controller@1000c000 {
+			compatible = "mediatek,mt6755-apmixedsys", "mediatek,apmixed";
+			reg = <0 0x1000c000 0 0x1000>, <0 0x10006000 0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		/*
+		 * PMIC wrapper (pwrap) + MT6351 PMIC. The MT6351 is not directly
+		 * MMIO-mapped; the SoC reaches it over the proprietary pwrap SPI
+		 * bridge, so the mt6351 MFD is a child of the pwrap node and takes
+		 * its regmap from the pwrap parent.
+		 *
+		 * reg-names "pwrap" is required by the driver
+		 * (devm_platform_ioremap_resource_byname). interrupts = SPI 163 is
+		 * the pwrap line (stock mt6755 dtsi:602). Clocks: "spi" is the
+		 * topckgen PMICSPI mux -- the stock pwrap_hal.c programs CLK_CFG_5
+		 * with update bit 19, i.e. CLK_TOP_MUX_PMICSPI; "wrap" is the infra
+		 * AP-side PMIC-wrapper access gate. devm_clk_bulk_get_all_enabled()
+		 * enables both regardless of name.
+		 *
+		 * The pwrap_mt6755 master drops PWRAP_CAP_RESET (mt6755 has no
+		 * mainline reset controller); the wrapper reset is only used by
+		 * pwrap_init(), which is skipped because lk brings the PMIC up
+		 * (PWRAP_INIT_DONE2 set) before Linux.
+		 *
+		 * mt6351 IRQ: the PMIC's nIRQ is wired to the SoC EINT block
+		 * (pinctrl/pio), EINT 150 (stock mt6755 dtsi used <&eintc> 150).
+		 * The mt6397 MFD requires a valid parent IRQ or its probe aborts.
+		 */
+		pwrap: pwrap@1000d000 {
+			compatible = "mediatek,mt6755-pwrap";
+			reg = <0 0x1000d000 0 0x1000>;
+			reg-names = "pwrap";
+			interrupts = <GIC_SPI 163 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&topckgen CLK_TOP_MUX_PMICSPI>,
+				 <&infrasys CLK_INFRA_PMIC_AP>;
+			clock-names = "spi", "wrap";
+
+			pmic: mt6351 {
+				compatible = "mediatek,mt6351";
+				/*
+				 * PMIC nIRQ RE-ENABLED (r91). The r68 fear — "requesting
+				 * EINT150 muxes the AUD_DAT_MOSI pad and corrupts the
+				 * display (gray stripes)" — predates the r83 silicon-exact
+				 * DSI timing and the r84 flip/bias fixes that killed those
+				 * stripes; retesting with the healthy display. Needed for
+				 * the power/home keys (PMIC-routed on this board) and RTC
+				 * alarms. If stripes return: this block is the first
+				 * suspect — re-comment interrupts and rebuild.
+				 */
+				interrupt-parent = <&pio>;
+				interrupts = <150 IRQ_TYPE_LEVEL_HIGH>;
+				interrupt-controller;
+				#address-cells = <0>;
+				#interrupt-cells = <2>;
+
+				keys {
+					compatible = "mediatek,mt6351-keys";
+
+					key-power {
+						linux,keycodes = <KEY_POWER>;
+						wakeup-source;
+					};
+
+					key-home {
+						linux,keycodes = <KEY_HOME>;
+					};
+				};
+
+				/*
+				 * MT6351 regulators. Node names are the driver of_match strings
+				 * (drivers/regulator/mt6351-regulator.c). Most rails are marked
+				 * regulator-always-on: lk leaves the live SoC/DRAM/eMMC/USB/clock
+				 * rails powered, and without a full consumer map the regulator
+				 * core would treat them as unused and could disable them at
+				 * late_initcall -- cutting a live rail would brick the boot. vibr
+				 * (vibrator) and vpa (RF PA) are load-switched peripheral rails,
+				 * off at boot, so they are left without always-on to avoid
+				 * force-enabling them. No min/max-microvolt: keep HW voltages.
+				 *
+				 * compatible REQUIRED: the mt6397-core MFD binds this
+				 * regulator block by .of_compatible ("mediatek,mt6351-
+				 * regulator", mt6397-core.c mt6351_devs). That match is
+				 * what gives the mt6351-regulator platform device its
+				 * of_node; the regulator core then walks THIS node's
+				 * children by desc->of_match (of_regulator.c:490,
+				 * regulators_node is NULL) to attach each rail's of_node.
+				 * Without it every rail registers WITHOUT an of_node, so
+				 * phandle supplies (touch vcc-supply = <&mt6351_vldo28>)
+				 * never resolve and consumers sit in -EPROBE_DEFER.
+				 */
+				/*
+				 * MT6351 RTC (base 0x4000, mt6397-family layout).
+				 * Timekeeping-only: with the PMIC nIRQ unwired (see
+				 * above) the driver runs without the alarm IRQ.
+				 */
+				rtc {
+					compatible = "mediatek,mt6351-rtc";
+				};
+
+				regulators {
+					compatible = "mediatek,mt6351-regulator";
+
+					mt6351_vcore: buck-vcore {
+						regulator-name = "vcore";
+						regulator-always-on;
+					};
+
+					mt6351_vgpu: buck-vgpu {
+						regulator-name = "vgpu";
+						regulator-always-on;
+					};
+
+					mt6351_vmodem: buck-vmodem {
+						regulator-name = "vmodem";
+						regulator-always-on;
+					};
+
+					mt6351_vmd1: buck-vmd1 {
+						regulator-name = "vmd1";
+						regulator-always-on;
+					};
+
+					mt6351_vsram_md: buck-vsram-md {
+						regulator-name = "vsram-md";
+						regulator-always-on;
+					};
+
+					mt6351_vs1: buck-vs1 {
+						regulator-name = "vs1";
+						regulator-always-on;
+					};
+
+					mt6351_vs2: buck-vs2 {
+						regulator-name = "vs2";
+						regulator-always-on;
+					};
+
+					mt6351_vpa: buck-vpa {
+						regulator-name = "vpa";
+					};
+
+					mt6351_vsram_proc: buck-vsram-proc {
+						regulator-name = "vsram-proc";
+						/*
+						 * cpufreq Vsram tracking window
+						 * (stock mt_cpufreq.c:101-105):
+						 * 930 mV..1150 mV, Vproc+100 mV
+						 * nominal / +200 mV max.
+						 */
+						regulator-min-microvolt = <930000>;
+						regulator-max-microvolt = <1150000>;
+						regulator-always-on;
+					};
+
+					mt6351_va18: ldo-va18 {
+						regulator-name = "va18";
+						regulator-always-on;
+					};
+
+					mt6351_vtcxo24: ldo-vtcxo24 {
+						regulator-name = "vtcxo24";
+						regulator-always-on;
+					};
+
+					mt6351_vtcxo28: ldo-vtcxo28 {
+						regulator-name = "vtcxo28";
+						regulator-always-on;
+					};
+
+					mt6351_vcn28: ldo-vcn28 {
+						regulator-name = "vcn28";
+						regulator-always-on;
+					};
+
+					mt6351_vcama: ldo-vcama {
+						regulator-name = "vcama";
+						regulator-always-on;
+					};
+
+					mt6351_vusb33: ldo-vusb33 {
+						regulator-name = "vusb33";
+						regulator-always-on;
+					};
+
+					mt6351_vsim1: ldo-vsim1 {
+						regulator-name = "vsim1";
+						regulator-always-on;
+					};
+
+					mt6351_vsim2: ldo-vsim2 {
+						regulator-name = "vsim2";
+						regulator-always-on;
+					};
+
+					mt6351_vemc: ldo-vemc {
+						regulator-name = "vemc";
+						regulator-always-on;
+					};
+
+					mt6351_vmch: ldo-vmch {
+						regulator-name = "vmch";
+						regulator-always-on;
+					};
+
+					mt6351_vio28: ldo-vio28 {
+						regulator-name = "vio28";
+						regulator-always-on;
+					};
+
+					mt6351_vibr: ldo-vibr {
+						regulator-name = "vibr";
+					};
+
+					mt6351_vcamd: ldo-vcamd {
+						regulator-name = "vcamd";
+						regulator-always-on;
+					};
+
+					mt6351_vrf18: ldo-vrf18 {
+						regulator-name = "vrf18";
+						regulator-always-on;
+					};
+
+					mt6351_vio18: ldo-vio18 {
+						regulator-name = "vio18";
+						regulator-always-on;
+					};
+
+					mt6351_vcn18: ldo-vcn18 {
+						regulator-name = "vcn18";
+						regulator-always-on;
+					};
+
+					mt6351_vcamio: ldo-vcamio {
+						regulator-name = "vcamio";
+						regulator-always-on;
+					};
+
+					mt6351_vxo22: ldo-vxo22 {
+						regulator-name = "vxo22";
+						regulator-always-on;
+					};
+
+					mt6351_vrf12: ldo-vrf12 {
+						regulator-name = "vrf12";
+						regulator-always-on;
+					};
+
+					mt6351_va10: ldo-va10 {
+						regulator-name = "va10";
+						regulator-always-on;
+					};
+
+					mt6351_vgp3: ldo-vgp3 {
+						regulator-name = "vgp3";
+						regulator-always-on;
+					};
+
+					mt6351_vefuse: ldo-vefuse {
+						regulator-name = "vefuse";
+						regulator-always-on;
+					};
+
+					mt6351_vmc: ldo-vmc {
+						regulator-name = "vmc";
+						regulator-always-on;
+					};
+
+					/*
+					 * Touch-panel VDD (stock "vtouch": stock DTB
+					 * vtouch-supply = ldo_vldo28). Deliberately NOT
+					 * always-on: lk leaves it off (live
+					 * LDO_VLDO28_STATUS=0, stock wt6755_66_sz_l.dts
+					 * annotation) and the touchscreen driver
+					 * enables it at probe. Ramp delay from stock
+					 * mt6351.dtsi:287.
+					 */
+					mt6351_vldo28: ldo-vldo28 {
+						regulator-name = "vldo28";
+						regulator-enable-ramp-delay = <264>;
+						/*
+						 * NOT always-on (r71): the powered-but-
+						 * unconfigured GT9xx sprays noise over
+						 * the LCD (gray stripes). Let the goodix
+						 * driver own the rail: probe failure
+						 * powers the chip back off and the
+						 * display stays clean.
+						 */
+					};
+				};
+			};
+		};
+
+		/*
+		 * Pin controller (paris). 7 config bases (gpio + iocfg0-5) +
+		 * the EINT controller = 8 reg regions, 8 reg-names.
+		 *
+		 * EINT reg fix (v17): the mtk-mainline/mt6755 fork DTS (and
+		 * every host copy) declared only 7 reg regions but 8 reg-names.
+		 * The 7 config bases consume reg indices 0-6, so the "eint" name
+		 * (index 7) had NO backing region. mtk_build_eint() computes
+		 * nbase = count(reg-names) - nbase_names = 8 - 7 = 1 and calls
+		 * of_iomap(np, 7) for the eint base. With no region 7, of_iomap
+		 * returns NULL; mtk_build_eint's IS_ERR() check does NOT catch
+		 * NULL, so eint->base[0] = NULL. mtk_eint_hw_init() then does
+		 * writel(0xffffffff, base[0] + dom_en/mask_set) → store to
+		 * ~0x400 → NULL-pointer data abort during pinctrl probe (the v16
+		 * "mtk_eint_do_init+0x2b4" panic; +0x2b4 is the return addr of
+		 * the preceding irq_domain_create_linear call, the last bl before
+		 * the faulting inline writel).
+		 *
+		 * v16 also wrongly moved reg index 6 (iocfg5 — a config base used
+		 * by MSDC0/eMMC pins) to 0x1000b000. v17 put iocfg5 back on a
+		 * config base and added a proper 8th region for eint.
+		 *
+		 * Base remap (r59, touch EINT fix): the fork DTS had ALL config
+		 * bases misassigned — "gpio" pointed at 0x10002000 and "iocfg5"
+		 * at 0x10005000. Stock 3.18.140 m681 truth (mach/mt6755/include/
+		 * mach/mt_gpio_base.h GPIO_REGS: dir@+0x000/dout@+0x100/din@
+		 * +0x200/mode@+0x300..0x42F, mapped on the "mediatek,gpio"@
+		 * 0x10005000 node; gpio_cfg.h: IOCFG_0..5_BASE = 0x10002000 +
+		 * 0x000/0x200/0x400/0x600/0x800/0xA00): the DIR/DOUT/DIN/MODE
+		 * block ("gpio", driver base 0) is at 0x10005000 and the six
+		 * IES/SMT/PULL/DRV banks (iocfg0-5, driver bases 1-6) are at
+		 * 0x10002000..0x10002a00. With the old map every GPIO_DIR read
+		 * landed in IOCFG_0 IES space, so mtk_gpio_get_direction()
+		 * reported random directions — gpiochip_lock_as_irq() saw the
+		 * touch INT pin (GPIO1/EINT1) as OUTPUT and failed EINT
+		 * request_resources with -EIO. The pinctrl-mt6755.c field
+		 * tables themselves match stock gpio_cfg.h bank-for-bank
+		 * (e.g. pin0-7 PULLEN = IOCFG_3+0x60 bit14+, EINT11 IES =
+		 * IOCFG_0) and need no change. EINT base 0x1000b000 was
+		 * already correct (stock eintc@1000b000).
+		 */
+		pio: pinctrl@10005000 {
+			compatible = "mediatek,mt6755-pinctrl";
+			reg = <0 0x10005000 0 0x1000>,  /* gpio   (base 0: DIR/DOUT/DIN/MODE) */
+			      <0 0x10002000 0 0x200>,   /* iocfg0 (base 1) */
+			      <0 0x10002200 0 0x200>,   /* iocfg1 (base 2) */
+			      <0 0x10002400 0 0x200>,   /* iocfg2 (base 3) */
+			      <0 0x10002600 0 0x200>,   /* iocfg3 (base 4) */
+			      <0 0x10002800 0 0x200>,   /* iocfg4 (base 5) */
+			      <0 0x10002a00 0 0x200>,   /* iocfg5 (base 6) */
+			      <0 0x1000b000 0 0x1000>;  /* eint            */
+			reg-names = "gpio", "iocfg0", "iocfg1", "iocfg2",
+				    "iocfg3", "iocfg4", "iocfg5", "eint";
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pio 0 0 190>;
+			interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-controller;
+			#address-cells = <0>;
+			#interrupt-cells = <2>;
+		};
+
+		/*
+		 * CPUXGPT system timer: the ARMv8 arch timer counter does not
+		 * run until this block is started (stock mt_cpuxgpt.c: CTL at
+		 * +0x670, INDEX at +0x674 — same layout as mt6795). Without
+		 * it the boot freezes at the first delay/sleep with printk
+		 * timestamps stuck at [0.000000].
+		 */
+		systimer: timer@10200670 {
+			compatible = "mediatek,mt6755-systimer",
+				     "mediatek,mt6795-systimer";
+			reg = <0 0x10200670 0 0x10>;
+			interrupts = <GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&system_clk>;
+			clock-names = "clk13m";
+		};
+
+		sysirq: intpol-controller@10200620 {
+			compatible = "mediatek,mt6755-sysirq",
+				     	 "mediatek,mt6577-sysirq";
+			interrupt-controller;
+			#address-cells = <0>;
+			#interrupt-cells = <3>;
+			interrupt-parent = <&gic>;
+			reg = <0 0x10200620 0 0x20>;
+		};
+
+		gic: interrupt-controller@10231000 {
+			compatible = "arm,gic-400";
+			#address-cells = <0>;
+			#interrupt-cells = <3>;
+			interrupt-parent = <&gic>;
+			interrupt-controller;
+			reg = <0 0x10231000 0 0x1000>,
+			      <0 0x10232000 0 0x2000>,
+			      <0 0x10234000 0 0x2000>,
+			      <0 0x10236000 0 0x2000>;
+		};
+
+		watchdog@10007000 {
+			compatible = "mediatek,mt6755-wdt",
+						 "mediatek,mt6589-wdt";
+			reg = <0 0x10007000 0 0x100>;
+		};
+
+		uart0: serial@11002000 {
+			compatible = "mediatek,mt6755-uart",
+				     "mediatek,mt6577-uart";
+			reg = <0 0x11002000 0 0x400>;
+			interrupts = <GIC_SPI 91 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&clk26m>;
+			status = "disabled";
+		};
+
+		uart1: serial@11003000 {
+			compatible = "mediatek,mt6755-uart",
+				     "mediatek,mt6577-uart";
+			reg = <0 0x11003000 0 0x400>;
+			interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&clk26m>;
+			status = "disabled";
+		};
+
+		/*
+		 * I2C0 — the touch-panel bus on m681. VERIFIED-FROM-STOCK
+		 * (stock mt6755.dtsi:1124-1135): reg 0x11007000 + AP-DMA
+		 * channel regs 0x11000100/0x80, SPI 84 level-low, clock-div 10,
+		 * clocks INFRA_I2C0 ("main") + INFRA_AP_DMA ("dma").
+		 *
+		 * Fallback "mediatek,mt8173-i2c": the MT6755 i2c IP is the
+		 * mt8173-class V1 block — OFFSET_TIMING 0x20, EXT_CONF 0x28,
+		 * TRANSFER_LEN_AUX 0x6c, TX_MEM_ADDR2/DMA-4G-mode present
+		 * (stock i2c-mtk.h:65,100,145-163) == mainline mt_i2c_regs_v1 +
+		 * mt8173_compat (auto_restart, aux_len_reg, 33-bit DMA).
+		 *
+		 * No clock-frequency on purpose: stock ran this bus at the
+		 * 100 kHz default (I2C_DEFAUT_SPEED, stock i2c-mtk.h:67; the
+		 * stock dtsi sets no speed either), mainline defaults the same.
+		 */
+		i2c0: i2c@11007000 {
+			compatible = "mediatek,mt6755-i2c",
+				     "mediatek,mt8173-i2c";
+			reg = <0 0x11007000 0 0x1000>,
+			      <0 0x11000100 0 0x80>;
+			interrupts = <GIC_SPI 84 IRQ_TYPE_LEVEL_LOW>;
+			clock-div = <10>;
+			clocks = <&infrasys CLK_INFRA_I2C0>,
+				 <&infrasys CLK_INFRA_AP_DMA>;
+			clock-names = "main", "dma";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		/*
+		 * i2c1/i2c2/i2c3(appm) — VERIFIED-FROM-STOCK (stock
+		 * mt6755.dtsi:1360-1384,1439-1450): bases 0x11008000/
+		 * 0x11009000/0x1100f000, AP-DMA channels 0x180/0x200/0x280,
+		 * SPI 85/86/87, clock-div 10 each; same mt8173-class V1 IP
+		 * as i2c0. Stock hangs the MT6311 Vproc ext-buck off the
+		 * appm bus (i2c3) and the sensor cluster off i2c2.
+		 */
+		/*
+		 * Keypad — VERIFIED-FROM-STOCK (stock mt6755.dtsi:844-848:
+		 * keypad@10010000, SPI 164 edge-falling). The MTK KP IP is the
+		 * same vintage block mt6779-keypad drives; clock = infra bit16
+		 * (stock 3.18 clk-mt6755.c:1356), parent axi.
+		 */
+		keypad: keypad@10010000 {
+			compatible = "mediatek,mt6779-keypad";
+			reg = <0 0x10010000 0 0x1000>;
+			interrupts = <GIC_SPI 164 IRQ_TYPE_EDGE_FALLING>;
+			clocks = <&infrasys CLK_INFRA_KP>;
+			clock-names = "kpd";
+			status = "disabled";
+		};
+
+		i2c1: i2c@11008000 {
+			compatible = "mediatek,mt6755-i2c",
+				     "mediatek,mt8173-i2c";
+			reg = <0 0x11008000 0 0x1000>,
+			      <0 0x11000180 0 0x80>;
+			interrupts = <GIC_SPI 85 IRQ_TYPE_LEVEL_LOW>;
+			clock-div = <10>;
+			clocks = <&infrasys CLK_INFRA_I2C1>,
+				 <&infrasys CLK_INFRA_AP_DMA>;
+			clock-names = "main", "dma";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		i2c2: i2c@11009000 {
+			compatible = "mediatek,mt6755-i2c",
+				     "mediatek,mt8173-i2c";
+			reg = <0 0x11009000 0 0x1000>,
+			      <0 0x11000200 0 0x80>;
+			interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL_LOW>;
+			clock-div = <10>;
+			clocks = <&infrasys CLK_INFRA_I2C2>,
+				 <&infrasys CLK_INFRA_AP_DMA>;
+			clock-names = "main", "dma";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		i2c3: i2c@1100f000 {
+			compatible = "mediatek,mt6755-i2c",
+				     "mediatek,mt8173-i2c";
+			reg = <0 0x1100f000 0 0x1000>,
+			      <0 0x11000280 0 0x80>;
+			interrupts = <GIC_SPI 87 IRQ_TYPE_LEVEL_LOW>;
+			clock-div = <10>;
+			clocks = <&infrasys CLK_INFRA_I2C3>,
+				 <&infrasys CLK_INFRA_AP_DMA>;
+			clock-names = "main", "dma";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		mmc0: mmc@11230000 {
+			compatible = "mediatek,mt6755-mmc", "mediatek,mt6795-mmc";
+			reg = <0 0x11230000 0 0x1000>;
+			interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&infrasys CLK_INFRA_MSDC0>,
+				 <&topckgen CLK_TOP_MUX_MSDC50_0_HCLK>,
+				 <&topckgen CLK_TOP_MUX_MSDC50_0>;
+			clock-names = "source", "hclk", "source_cg";
+			status = "disabled";
+		};
+
+		ssusb: usb@11271000 {
+			compatible = "mediatek,mt6755-mtu3", "mediatek,mtu3";
+			reg = <0 0x11271000 0 0x2e00>,
+			      <0 0x11280700 0 0x0100>;
+			reg-names = "mac", "ippc";
+			/*
+			 * USB device (mtu3) interrupt = GIC_SPI 72 (r47 fix).
+			 *
+			 * The STOCK m681 3.18 dtsi (the oracle) is unambiguous:
+			 *   usb0:usb3@11270000  interrupts = SPI 72, 73
+			 *                       interrupt-names = "musb-hdrc", "xhci"
+			 *   xhci0:usb3_xhci     interrupts = SPI 123 ("xhci")
+			 * i.e. SPI 72 = DEVICE controller, SPI 123 = xHCI HOST — the
+			 * OPPOSITE of the Nokia skeleton mapping used since r26. The
+			 * r26 "fix" (123) only appeared to work because the INT_POL
+			 * polarity was broken then: the idle xhci line phantom-stormed
+			 * and the ISR's constant polling serviced the device events by
+			 * accident. With INT_POL fixed (sysirq SMC), SPI 123 went
+			 * quiet and enumeration died — the real device asserts SPI 72.
+			 *
+			 * (Historical note kept for context: the old r24/r25 SPI-72
+			 * "storm with LV1ISR=0" was the same polarity artifact, not
+			 * evidence that 72 is the host line.)
+			 * The r24/r25 diagnostics proved the SPI-72 storm fires with
+			 * U3D_LV1ISR *raw* = 0 on every IRQ under BOTH LEVEL_LOW and
+			 * LEVEL_HIGH (byte-identical, polarity-independent): the U3D device
+			 * core never asserts, because 72 is the host controller's line and
+			 * we were servicing the wrong SPI. Move the device handler to its
+			 * real line (123) so mtu3_irq sees actual EP0/BMU/QMU events.
+			 * LEVEL_LOW per the skeleton + the mt8173/mt8183 convention
+			 * (mt6577-sysirq inverts to the GIC's active-high). The earlier
+			 * "SPI 123 livelock" was under maxcpus=0 with the dataerr/DMA storm
+			 * sources and no PHY — all since fixed.
+			 */
+			interrupts = <GIC_SPI 72 IRQ_TYPE_LEVEL_LOW>;
+			phys = <&usb2port0 PHY_TYPE_USB2>;
+			clocks = <&infrasys CLK_INFRA_ICUSB>,
+				 <&infrasys CLK_INFRA_SSUSB_TOP>;
+			clock-names = "sys_ck", "ref_ck";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			status = "disabled";
+
+			usb_host: usb@11270000 {
+				compatible = "mediatek,mt6755-xhci",
+					     "mediatek,mtk-xhci";
+				reg = <0 0x11270000 0 0x1000>;
+				reg-names = "mac";
+				/* xhci (host) interrupt = GIC_SPI 73 per stock m681 dtsi */
+				interrupts = <GIC_SPI 73 IRQ_TYPE_LEVEL_LOW>;
+				clocks = <&infrasys CLK_INFRA_ICUSB>,
+					 <&infrasys CLK_INFRA_SSUSB_TOP>;
+				clock-names = "sys_ck", "ref_ck";
+				status = "disabled";
+			};
+		};
+
+		/*
+		 * MT6755 SSUSB T-PHY. The USB2 PHY analog bank does NOT live
+		 * in the 0x11280000 "ssusb_sif" region (that region holds the
+		 * U3D SPLLC mirror + IPPC@0x700). All PHY register banks live
+		 * in the second sif ("ssusb_sif2") at 0x11290000, in the
+		 * MT8173-class T-PHY V1 layout:
+		 *   0x11290000 SPLLC     (shared)
+		 *   0x11290100 U2FREQ    (slew-rate freq meter, shared)
+		 *   0x11290800 U2PHY_COM (USBPHYACR0..6 / U2PHYDTM0/1)
+		 *   0x11290900 U3 PHYD
+		 *   0x11290b00 U3 PHYA
+		 * FACT source: stock kernel-3.18 mu3d_hal_hw.h:148-153
+		 * (SSUSB_SIFSLV_U2PHY_COM_BASE = u3_sif2_base + 0x800) and
+		 * stock dtsi reg-names "ssusb_sif2" = <0x11290000 0x10000>.
+		 * The mt8173-u3phy fallback selects tphy V1 pdata whose
+		 * avoid_rx_sen_degradation port-0 init writes the same
+		 * USBPHYACR2[18]=1 / U2PHYDCR0[24]=0 pair as the stock
+		 * usb20_pll_settings(). A previous revision modelled this as
+		 * generic-tphy-v2 at 0x11280000: every USB2 PHY init write
+		 * then landed at 0x11280b00 (v2 com offset +0x300) instead of
+		 * 0x11290800, so the PHY stayed in the powered-down state lk
+		 * left it in and never drove the D+ pull-up.
+		 */
+		usb3phy: t-phy@11290000 {
+			compatible = "mediatek,mt6755-tphy",
+				     "mediatek,mt8173-u3phy";
+			reg = <0 0x11290000 0 0x700>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			status = "disabled";
+
+			usb2port0: usb-phy@11290800 {
+				reg = <0 0x11290800 0 0x100>;
+				clocks = <&infrasys CLK_INFRA_SSUSB_TOP>;
+				clock-names = "ref";
+				#phy-cells = <1>;
+			};
+		};
+
+/*
+ * MT6755 display subsystem nodes — fragment to merge into the soc{} node of
+ * arch/arm64/boot/dts/mediatek/mt6755.dtsi.
+ *
+ * Also add at the top of mt6755.dtsi:
+ *   #include <dt-bindings/power/mediatek,mt6755-power.h>
+ *
+ * All reg addresses + interrupts are VERIFIED-FROM-STOCK
+ * (kernel-m681-m6base-3.18.140/kernel-3.18/arch/arm64/boot/dts/mt6755.dtsi,
+ * dispsys node ~line 1663: OVL0 14008000/SPI184, RDMA0 1400A000/SPI186,
+ * COLOR 1400D000/SPI189, CCORR 1400E000/SPI190, AAL 1400F000/SPI191,
+ * GAMMA 14010000/SPI192, DITHER 14011000/SPI193, DSI0 14012000/SPI194,
+ * MUTEX 14014000/SPI177, MMSYS 14000000/SPI196, MIPITX 10215000,
+ * DISP_PWM 1100E000).
+ *
+ * Ordering note: every display block sits behind the DISP MTCMOS + MMSYS
+ * clock gates. Register access with the domain off HANGS THE BUS (stock
+ * clk-mt6755-pg.c:203 comment). Hence power-domains on every node below.
+ */
+
+	/* System Power Manager (SPM) / SCPSYS: DISP MTCMOS provider */
+	scpsys: syscon@10006000 {
+		compatible = "mediatek,mt6755-scpsys", "syscon", "simple-mfd";
+		reg = <0 0x10006000 0 0x1000>;
+
+		spm: power-controller {
+			compatible = "mediatek,mt6755-power-controller";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			#power-domain-cells = <1>;
+			/*
+			 * TOPAXI bus-protection regmap for the DISP domain.
+			 * Modern "access-controllers" binding: the legacy
+			 * "mediatek,infracfg" path in mtk-pm-domains.c resolves via
+			 * of_find_node_with_property(np,...) which starts the search
+			 * AFTER np, so a property on the power-controller node itself
+			 * is never found -> bus_prot[INFRA] NULL -> NULL deref in
+			 * scpsys_bus_protect_clear during DISP power-on at probe
+			 * (r30/r31 Oops). scpsys_get_bus_protection() reads
+			 * access-controllers directly via of_parse_phandle +
+			 * device_node_to_regmap(&infrasys).
+			 */
+			access-controllers = <&infrasys>;
+			mediatek,infracfg = <&infrasys>;
+
+			power-domain@MT6755_POWER_DOMAIN_DISP {
+				reg = <MT6755_POWER_DOMAIN_DISP>;
+				/*
+				 * mm_sel must tick during SRAM PDN handshake
+				 * ("Need hf_fmm_ck for SRAM PDN delay IP",
+				 * stock clk-mt6755-pg.c DIS sequence).
+				 */
+				clocks = <&topckgen CLK_TOP_MUX_MM>;
+				clock-names = "mm";
+				#power-domain-cells = <0>;
+			};
+
+			/*
+			 * GPU MTCMOS pair: MFG_ASYNC (bus glue) -> MFG (core).
+			 * (These were briefly removed for the r52 bisect; that
+			 * bisect EXONERATED them — the r48-r52 hang was the
+			 * clk-mt6755-mfg num_clks OOB, not scpsys. Restored.)
+			 */
+			power-domain@MT6755_POWER_DOMAIN_MFG_ASYNC {
+				reg = <MT6755_POWER_DOMAIN_MFG_ASYNC>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				#power-domain-cells = <0>;
+
+				power-domain@MT6755_POWER_DOMAIN_MFG {
+					reg = <MT6755_POWER_DOMAIN_MFG>;
+					/* mfg_sel ticks during the SRAM PDN
+					 * handshake, mirroring the DIS/mm_sel
+					 * requirement. */
+					clocks = <&topckgen CLK_TOP_MUX_MFG>;
+					clock-names = "mfg";
+					#power-domain-cells = <0>;
+				};
+			};
+		};
+	};
+
+	mmsys: syscon@14000000 {
+		compatible = "mediatek,mt6755-mmsys", "syscon";
+		reg = <0 0x14000000 0 0x1000>;
+		#clock-cells = <1>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	mfgcfg: clock-controller@13000000 {
+		/* stock: mfgsys@13000000, gate MFG_BG3D (bit 0, set/clr/sta
+		 * 0x4/0x8/0x0), parent mfg_sel. Registers INERTLY: NO
+		 * power-domains here, so the boot probe never powers MFG_ASYNC
+		 * (that power-on intermittently hangs m681 boot). MFG_ASYNC is
+		 * powered by the consumer — panfrost's power-domains=MFG (child)
+		 * — before it enables BG3D. See clk-mt6755-mfg.c. */
+		compatible = "mediatek,mt6755-mfgcfg";
+		reg = <0 0x13000000 0 0x1000>;
 		#clock-cells = <1>;
 	};
 
-	infrasys: clock-controller@10001000 {
-		compatible = "mediatek,mt6755-infrasys", "syscon";
-		reg = <0 0x10001000 0 0x1000>;
-		#clock-cells = <1>;
-		#reset-cells = <1>;
+	gpu: gpu@13040000 {
+		/*
+		 * Mali-T860MP2 (panfrost). VERIFIED-FROM-STOCK mali@13040000:
+		 * reg 0x13040000/0x4000, JOB=SPI218 MMU=SPI217 GPU=SPI216
+		 * (all LEVEL_LOW), clock mfgsys MFG_BG3D, 700 MHz.
+		 */
+		compatible = "arm,mali-t860", "arm,mali-midgard";
+		reg = <0 0x13040000 0 0x4000>;
+		interrupts = <GIC_SPI 218 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 217 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 216 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-names = "job", "mmu", "gpu";
+		clocks = <&mfgcfg CLK_MFG_BG3D>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_MFG>;
 	};
 
-	apmixedsys: clock-controller@1000c000 {
-		compatible = "mediatek,mt6755-apmixedsys";
-		reg = <0 0x1000c000 0 0x1000>;
+	mutex: mutex@14014000 {
+		compatible = "mediatek,mt6755-disp-mutex";
+		reg = <0 0x14014000 0 0x1000>;
+		interrupts = <GIC_SPI 177 IRQ_TYPE_LEVEL_LOW>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	ovl0: ovl@14008000 {
+		/*
+		 * MT6755 OVL layout == MT8173 OVL (L0_ADDR 0xf40, stock
+		 * ddp_reg.h:1980) -> reuse mt8173-disp-ovl driver data.
+		 */
+		compatible = "mediatek,mt6755-disp-ovl",
+			     "mediatek,mt8173-disp-ovl";
+		reg = <0 0x14008000 0 0x1000>;
+		interrupts = <GIC_SPI 184 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP0_DISP_OVL0>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	color0: color@1400d000 {
+		/* COLOR_START at +0xc00 (ddp_reg.h:1318) == mt8173 layout */
+		compatible = "mediatek,mt6755-disp-color",
+			     "mediatek,mt8173-disp-color";
+		reg = <0 0x1400d000 0 0x1000>;
+		interrupts = <GIC_SPI 189 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP0_DISP_COLOR>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	ccorr0: ccorr@1400e000 {
+		/* EN 0x0 / CFG 0x20 / SIZE 0x30 (ddp_reg.h:1641-1650) == mt8183 */
+		compatible = "mediatek,mt6755-disp-ccorr",
+			     "mediatek,mt8183-disp-ccorr";
+		reg = <0 0x1400e000 0 0x1000>;
+		interrupts = <GIC_SPI 190 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP0_DISP_CCORR>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	aal0: aal@1400f000 {
+		/* EN 0x0 / CFG 0x20 / SIZE 0x30 (ddp_reg.h:1200-1209) == mt8173 */
+		compatible = "mediatek,mt6755-disp-aal",
+			     "mediatek,mt8173-disp-aal";
+		reg = <0 0x1400f000 0 0x1000>;
+		interrupts = <GIC_SPI 191 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP0_DISP_AAL>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	gamma0: gamma@14010000 {
+		/* EN 0x0 / CFG 0x20 / SIZE 0x30 (ddp_reg.h:1663-1672) == mt8173 */
+		compatible = "mediatek,mt6755-disp-gamma",
+			     "mediatek,mt8173-disp-gamma";
+		reg = <0 0x14010000 0 0x1000>;
+		interrupts = <GIC_SPI 192 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP0_DISP_GAMMA>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	dither0: dither@14011000 {
+		/* EN 0x0 / CFG 0x20 / SIZE 0x30 (ddp_reg.h:1771-1780) == mt8183 */
+		compatible = "mediatek,mt6755-disp-dither",
+			     "mediatek,mt8183-disp-dither";
+		reg = <0 0x14011000 0 0x1000>;
+		interrupts = <GIC_SPI 193 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP0_DISP_DITHER>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	rdma0: rdma@1400a000 {
+		/*
+		 * MEM_START_ADDR 0xf00 (ddp_reg.h:2276) and 8 KiB FIFO
+		 * (512 units x 16 B, stock ddp_rdma.c:258-263) == mt8173.
+		 */
+		compatible = "mediatek,mt6755-disp-rdma",
+			     "mediatek,mt8173-disp-rdma";
+		reg = <0 0x1400a000 0 0x1000>;
+		interrupts = <GIC_SPI 186 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP0_DISP_RDMA0>;
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+	};
+
+	dsi0: dsi@14012000 {
+		/*
+		 * DSI layout == mt8173 (regs 0x00..0x11C identical incl.
+		 * PHY_TIMECON0 0x110, VM_CMD_CON 0x130, CMDQ base 0x200 —
+		 * stock ddp_reg.h:832-880 + ddp_dsi.c:638).
+		 */
+		compatible = "mediatek,mt6755-dsi", "mediatek,mt8173-dsi";
+		reg = <0 0x14012000 0 0x1000>;
+		interrupts = <GIC_SPI 194 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&mmsys CLK_MM_DISP1_DSI_ENGINE>,
+			 <&mmsys CLK_MM_DISP1_DSI_DIGITAL>,
+			 <&mipi_tx0>;
+		clock-names = "engine", "digital", "hs";
+		phys = <&mipi_tx0>;
+		phy-names = "dphy";
+		power-domains = <&spm MT6755_POWER_DOMAIN_DISP>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	mipi_tx0: dsi-phy@10215000 {
+		/*
+		 * MIPITX layout == mt8173 (CON 0x00, lanes 0x04-0x14,
+		 * TOP/BG 0x40/0x44, PLL_CON0-3 0x50-0x5C with MPPLL
+		 * PREDIV/TXDIV0/TXDIV1/POSDIV bitfields, PLL_TOP 0x64,
+		 * PLL_PWR 0x68, SW_CTRL 0x80 — stock ddp_reg.h:930-962,142-152).
+		 * NOT inside the DISP domain (0x10215000 is on the infra bus,
+		 * same as stock, which programs it before DISP clocks).
+		 */
+		compatible = "mediatek,mt6755-mipi-tx",
+			     "mediatek,mt8173-mipi-tx";
+		reg = <0 0x10215000 0 0x1000>;
 		clocks = <&clk26m>;
-		clock-names = "clk26m";
-		#clock-cells = <1>;
-	};
-
-	pio: pinctrl@10005000 {
-		compatible = "mediatek,mt6755-pinctrl";
-		reg = <0 0x10005000 0 0x1000>,
-		      <0 0x10002000 0 0x200>,
-		      <0 0x10002200 0 0x200>,
-		      <0 0x10002400 0 0x200>,
-		      <0 0x10002600 0 0x200>,
-		      <0 0x10002800 0 0x200>,
-		      <0 0x10002a00 0 0x200>,
-		      <0 0x1000b000 0 0x1000>;
-		reg-names = "gpio", "iocfg0", "iocfg1", "iocfg2",
-			    "iocfg3", "iocfg4", "iocfg5", "eint";
-		gpio-controller;
-		#gpio-cells = <2>;
-		gpio-ranges = <&pio 0 0 190>;
-		interrupt-controller;
-		#address-cells = <0>;
-		#interrupt-cells = <2>;
-		interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
-	};
-
-	sysirq: interrupt-controller@10200620 {
-		compatible = "mediatek,mt6755-sysirq",
-			     "mediatek,mt6577-sysirq";
-		interrupt-controller;
-		#address-cells = <0>;
-		#interrupt-cells = <3>;
-		interrupt-parent = <&gic>;
-		reg = <0 0x10200620 0 0x20>;
-	};
-
-	gic: interrupt-controller@10231000 {
-		compatible = "arm,gic-400";
-		#interrupt-cells = <3>;
-		interrupt-parent = <&gic>;
-		interrupt-controller;
-		#address-cells = <0>;
-		reg = <0 0x10231000 0 0x1000>,
-		      <0 0x10232000 0 0x2000>,
-		      <0 0x10234000 0 0x2000>,
-		      <0 0x10236000 0 0x2000>;
-	};
-
-	uart0: serial@11002000 {
-		compatible = "mediatek,mt6755-uart",
-			     "mediatek,mt6577-uart";
-		reg = <0 0x11002000 0 0x400>;
-		interrupts = <GIC_SPI 91 IRQ_TYPE_LEVEL_LOW>;
-		clocks = <&topckgen CLK_TOP_MUX_UART>,
-			 <&infrasys CLK_INFRA_UART0>;
-		clock-names = "baud", "bus";
+		clock-output-names = "mipi_tx0_pll";
+		#clock-cells = <0>;
+		#phy-cells = <0>;
 		status = "disabled";
 	};
 
-	uart1: serial@11003000 {
-		compatible = "mediatek,mt6755-uart",
-			     "mediatek,mt6577-uart";
-		reg = <0 0x11003000 0 0x400>;
-		interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_LOW>;
-		clocks = <&topckgen CLK_TOP_MUX_UART>,
-			 <&infrasys CLK_INFRA_UART1>;
-		clock-names = "baud", "bus";
+	pwm0: pwm@1100e000 {
+		/*
+		 * DISP_PWM: EN 0x00 / COMMIT 0x08 / CON0 0x10 / CON1 0x14
+		 * (stock ddp_reg.h:1226-1229) == mt8173-disp-pwm.
+		 * Stage-3 (backlight); keep disabled until DRM pipe works.
+		 */
+		compatible = "mediatek,mt6755-disp-pwm",
+			     "mediatek,mt8173-disp-pwm";
+		reg = <0 0x1100e000 0 0x1000>;
+		#pwm-cells = <2>;
+		clocks = <&topckgen CLK_TOP_MUX_DISPPWM>,
+			 <&infrasys CLK_INFRA_DISP_PWM>;
+		clock-names = "main", "mm";
 		status = "disabled";
+	};
 	};
 };

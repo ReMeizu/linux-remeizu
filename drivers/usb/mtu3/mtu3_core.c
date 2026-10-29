@@ -11,6 +11,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/irq.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
@@ -196,6 +197,41 @@ static void mtu3_intr_disable(struct mtu3 *mtu)
 	mtu3_writel(mtu->mac_base, U3D_LV1IECR, ~0x0);
 	/* Disable endpoint interrupts */
 	mtu3_writel(mtu->mac_base, U3D_EPIECR, ~0x0);
+	/*
+	 * m681/MT6755: the preloader's download-mode USB driver leaves the
+	 * USB2 RX EP data-error interrupt enabled (and often asserted). That
+	 * source rolls up into EP_CTRL_INTR (LV1ISR bit 5) together with the
+	 * link/speed-change interrupt, but mtu3_irq only ever clears
+	 * U3D_DEV_LINK_INTR via mtu3_link_isr(). mtu3 itself never uses the
+	 * data-error interrupt, so on this level-triggered line an asserted
+	 * data-error bit keeps EP_CTRL_INTR high forever: the device IRQ
+	 * storms on the boot CPU and EP0 SETUP is never serviced, so the USB
+	 * host cannot enumerate the gadget. Writing 0 to the [31:16] enable
+	 * field disables every per-EP data-error interrupt and W1C-clears the
+	 * latched [15:0] status in a single access. (The stock mu3d driver
+	 * enables and explicitly W1Cs this register under EP_CTRL_INTR;
+	 * mainline mtu3 has no such handling, so mask it here instead.)
+	 */
+	mtu3_writel(mtu->mac_base, U3D_USB2_RX_EP_DATAERR_INTR,
+		    RX_EP_DATAERR_INT_STS);
+	/*
+	 * m681/MT6755: the preloader's download-mode USB driver uses the legacy
+	 * per-EP DMA engine and can hand off to the kernel with U3D_DMAIER still
+	 * enabling the EP0 DMA interrupt and U3D_DMAISR latched. That source rolls
+	 * up into U3D_LV1ISR bit 3 (DMA_INTR) — the one level-1 bit mainline mtu3
+	 * deliberately leaves masked in LV1IER (it uses the QMU, never the legacy
+	 * DMA) and never clears. On this level-triggered line an asserted DMA
+	 * interrupt therefore drives the device IRQ (GIC_SPI 72) forever while
+	 * "U3D_LV1ISR & U3D_LV1IER" reads 0 (bit 3 is not enabled in LV1IER), so
+	 * mtu3_irq dispatches and clears nothing: the IRQ storms on the boot CPU
+	 * and EP0 SETUP is never serviced, so the USB host cannot enumerate. mtu3
+	 * has no legacy-DMA path, so disable every DMA interrupt (W1C the enable via
+	 * U3D_DMAIECR) and W1C-clear any latched status in U3D_DMAISR. (Stock mu3d
+	 * enables and W1Cs these under DMA_INTR; mainline masks them here instead,
+	 * mirroring the preloader-left U3D_USB2_RX_EP_DATAERR_INTR handling above.)
+	 */
+	mtu3_writel(mtu->mac_base, U3D_DMAIECR, ~0x0);
+	mtu3_writel(mtu->mac_base, U3D_DMAISR, ~0x0);
 	mtu3_intr_status_clear(mtu);
 }
 
@@ -365,6 +401,30 @@ void mtu3_start(struct mtu3 *mtu)
 	mtu3_intr_enable(mtu);
 	mtu->is_active = 1;
 
+	/*
+	 * Enable the device IRQ line only now — the controller is fully
+	 * configured and a gadget is bound. It is requested with IRQF_NO_AUTOEN
+	 * and NOT enabled in probe: on m681 (single CPU, maxcpus=0) enabling it
+	 * against an unconfigured controller while a USB-host packet is pending
+	 * livelocks the only CPU. Deferring to here closes that window.
+	 */
+	if (!mtu->irq_enabled) {
+		/*
+		 * m681/MT6755: re-apply the DT trigger polarity so the MediaTek
+		 * sysirq inverter (irq-mtk-sysirq.c) programs the invert bit for this
+		 * line BEFORE it is unmasked. Measured: the sysirq invert bit for the
+		 * device IRQ (GIC_SPI 123 -> intpol 0x1020062C bit27) is left 0, while
+		 * an identically-declared LEVEL_LOW line (mmc SPI79 -> 0x10200628 bit15)
+		 * is correctly 1. The GIC only latches active-HIGH, so with invert=0 it
+		 * reads the controller's idle (active-low) level as a permanent
+		 * assertion -> SPI 123 storms ~157k/s with U3D_LV1ISR=0 (core asserts
+		 * nothing). No MAC/IPPC mask can fix a mis-inverted GIC input.
+		 */
+		irq_set_irq_type(mtu->irq, IRQ_TYPE_LEVEL_LOW);
+		enable_irq(mtu->irq);
+		mtu->irq_enabled = true;
+	}
+
 	if (mtu->softconnect)
 		mtu3_dev_on_off(mtu, 1);
 }
@@ -372,6 +432,11 @@ void mtu3_start(struct mtu3 *mtu)
 void mtu3_stop(struct mtu3 *mtu)
 {
 	dev_dbg(mtu->dev, "%s\n", __func__);
+
+	if (mtu->irq_enabled) {
+		disable_irq(mtu->irq);
+		mtu->irq_enabled = false;
+	}
 
 	mtu3_intr_disable(mtu);
 
@@ -659,8 +724,39 @@ static void mtu3_regs_init(struct mtu3 *mtu)
 
 	/* U2/U3 detected by HW */
 	mtu3_writel(mbase, U3D_DEVICE_CONF, 0);
-	/* vbus detected by HW */
-	mtu3_clrbits(mbase, U3D_MISC_CTRL, VBUS_FRC_EN | VBUS_ON);
+	/*
+	 * m681: FORCE VBUS valid. The USB PHY has no VBUS comparator wired to it
+	 * (VBUS sense on this phone goes through the MT6351 PMIC/charger, which
+	 * mainline does not drive yet). With HW VBUS detection the gadget never
+	 * sees the host's VBUS, so it never connects — softconnect is set and
+	 * "pullup D+" is logged, but the IP gates the physical D+ pull-up on VBUS
+	 * and the host never enumerates the device (no RNDIS/NCM ever appears).
+	 * Forcing VBUS on makes the peripheral connect. dr_mode is peripheral-
+	 * only here; revert to HW detection once MT6351 VBUS sensing exists.
+	 */
+	mtu3_setbits(mbase, U3D_MISC_CTRL, VBUS_FRC_EN | VBUS_ON);
+	/*
+	 * m681/MT6755: mask + clear the SSUSB OTG VBUS-change interrupt. It lives
+	 * in the IPPC block (U3D_SSUSB_OTG_STS / U3D_SSUSB_OTG_INT_EN), NOT in
+	 * U3D_LV1ISR, but it still drives the device IRQ line (GIC_SPI 72). The
+	 * preloader leaves it enabled, and forcing VBUS_ON above latches a VBUS
+	 * change, so it stays asserted forever; mtu3 never touches this register,
+	 * so the level-triggered line storms with U3D_LV1ISR reading 0 (verified
+	 * on m681: 100k+ spurious IRQs on CPU0, raw LV1ISR=0), starving EP0 so the
+	 * USB host times out during enumeration. mtu3 peripheral mode with forced
+	 * VBUS does not use it, so disable it and W1C-clear any latched status.
+	 * (Stock mu3d enables it and W1Cs it every ISR; we disable it outright.)
+	 */
+	mtu3_writel(mtu->ippc_base, U3D_SSUSB_OTG_INT_EN, 0);
+	/*
+	 * W1C every OTG interrupt latch. NOTE: U3D_SSUSB_OTG_STS_CLR has its own
+	 * bit layout, distinct from U3D_SSUSB_OTG_STS: the STS value that forcing
+	 * VBUS leaves set (VBUS_VALID bit9 / IDDIG bit10 / AVALID bit12) are *state*
+	 * bits with no clear function, so writing the STS value back — as this code
+	 * previously did — clears nothing. Write the actual clear-bit mask instead
+	 * (role bits 0-5, VBUS_CHG bit6, DEV_USBRST bit7, SRP bit11).
+	 */
+	mtu3_writel(mtu->ippc_base, U3D_SSUSB_OTG_STS_CLR, SSUSB_OTG_INTR_CLR_ALL);
 	/* use new QMU format when HW version >= 0x1003 */
 	if (mtu->gen2cp)
 		mtu3_writel(mbase, U3D_QFCR, ~0x0);
@@ -971,14 +1067,27 @@ int ssusb_gadget_init(struct ssusb_mtk *ssusb)
 		goto dma_mask_err;
 	}
 
+	/*
+	 * m681 (MT6755, single-CPU boot: maxcpus=0) livelocks inside
+	 * request_threaded_irq if the mtu3 device IRQ is asserted/pending when it
+	 * is auto-enabled here (a USB-host packet racing the probe): the primary
+	 * handler keeps re-firing on the one CPU and the call never returns. The
+	 * upstream order only quiesces the controller (mtu3_stop -> device IP
+	 * power-down + intr mask) AFTER this request. So register the IRQ DISABLED
+	 * (IRQF_NO_AUTOEN) and enable it only after mtu3_stop has powered the
+	 * device IP down, closing the race window. When a gadget later binds,
+	 * mtu3_start re-powers the IP and unmasks at the MAC as usual.
+	 */
 	ret = devm_request_threaded_irq(dev, mtu->irq, NULL, mtu3_irq,
-					IRQF_ONESHOT, dev_name(dev), mtu);
+					IRQF_ONESHOT | IRQF_NO_AUTOEN,
+					dev_name(dev), mtu);
 	if (ret) {
 		dev_err(dev, "request irq %d failed!\n", mtu->irq);
 		goto irq_err;
 	}
 
-	/* power down device IP for power saving by default */
+	/* power down device IP for power saving by default; leaves the IRQ line
+	 * disabled (NO_AUTOEN) — it is enabled later in mtu3_start at gadget bind */
 	mtu3_stop(mtu);
 
 	ret = mtu3_gadget_setup(mtu);

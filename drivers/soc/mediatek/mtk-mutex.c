@@ -330,6 +330,32 @@
 #define MT8195_MUTEX_EOF_DPI0			(MT8195_MUTEX_SOF_DPI0 << 7)
 #define MT8195_MUTEX_EOF_DPI1			(MT8195_MUTEX_SOF_DPI1 << 7)
 
+/*
+ * MT6755: mutex register scheme == MT2701 (stock ddp_reg.h:1818-1837);
+ * MOD bit assignment from stock ddp_path.c:223-247 (module_mutex_map);
+ * SOF/EOF field encoding from ddp_reg.h:1850-1862.
+ */
+#define MT6755_MUTEX_MOD_DISP_OVL0		7
+#define MT6755_MUTEX_MOD_DISP_OVL1		8
+#define MT6755_MUTEX_MOD_DISP_RDMA0		9
+#define MT6755_MUTEX_MOD_DISP_RDMA1		10
+#define MT6755_MUTEX_MOD_DISP_WDMA0		11
+#define MT6755_MUTEX_MOD_DISP_COLOR0		12
+#define MT6755_MUTEX_MOD_DISP_CCORR		13
+#define MT6755_MUTEX_MOD_DISP_AAL		14
+#define MT6755_MUTEX_MOD_DISP_GAMMA		15
+#define MT6755_MUTEX_MOD_DISP_DITHER		16
+#define MT6755_MUTEX_MOD_DISP_WDMA1		17
+#define MT6755_MUTEX_MOD_DISP_PWM0		18
+#define MT6755_MUTEX_MOD_DISP_OVL0_2L		19
+#define MT6755_MUTEX_MOD_DISP_OVL1_2L		20
+
+#define MT6755_MUTEX_SOF_SINGLE_MODE		0
+#define MT6755_MUTEX_SOF_DSI0			1
+#define MT6755_MUTEX_SOF_DPI0			2
+#define MT6755_MUTEX_EOF_DSI0			(MT6755_MUTEX_SOF_DSI0 << 6)
+#define MT6755_MUTEX_EOF_DPI0			(MT6755_MUTEX_SOF_DPI0 << 6)
+
 struct mtk_mutex {
 	u8 id;
 	bool claimed;
@@ -366,6 +392,27 @@ struct mtk_mutex_ctx {
 	const struct mtk_mutex_data	*data;
 	phys_addr_t			addr;
 	struct cmdq_client_reg		cmdq_reg;
+};
+
+static const u8 mt6755_mutex_mod[DDP_COMPONENT_ID_MAX] = {
+	[DDP_COMPONENT_AAL0] = MT6755_MUTEX_MOD_DISP_AAL,
+	[DDP_COMPONENT_CCORR] = MT6755_MUTEX_MOD_DISP_CCORR,
+	[DDP_COMPONENT_COLOR0] = MT6755_MUTEX_MOD_DISP_COLOR0,
+	[DDP_COMPONENT_DITHER0] = MT6755_MUTEX_MOD_DISP_DITHER,
+	[DDP_COMPONENT_GAMMA] = MT6755_MUTEX_MOD_DISP_GAMMA,
+	[DDP_COMPONENT_OVL0] = MT6755_MUTEX_MOD_DISP_OVL0,
+	[DDP_COMPONENT_OVL1] = MT6755_MUTEX_MOD_DISP_OVL1,
+	[DDP_COMPONENT_PWM0] = MT6755_MUTEX_MOD_DISP_PWM0,
+	[DDP_COMPONENT_RDMA0] = MT6755_MUTEX_MOD_DISP_RDMA0,
+	[DDP_COMPONENT_RDMA1] = MT6755_MUTEX_MOD_DISP_RDMA1,
+	[DDP_COMPONENT_WDMA0] = MT6755_MUTEX_MOD_DISP_WDMA0,
+};
+
+static const u16 mt6755_mutex_sof[DDP_MUTEX_SOF_MAX] = {
+	[MUTEX_SOF_SINGLE_MODE] = MT6755_MUTEX_SOF_SINGLE_MODE,
+	/* stock video mode sets both SOF and EOF to DSI0 (ddp_path.c:817-838) */
+	[MUTEX_SOF_DSI0] = MT6755_MUTEX_SOF_DSI0 | MT6755_MUTEX_EOF_DSI0,
+	[MUTEX_SOF_DPI0] = MT6755_MUTEX_SOF_DPI0 | MT6755_MUTEX_EOF_DPI0,
 };
 
 static const u8 mt2701_mutex_mod[DDP_COMPONENT_ID_MAX] = {
@@ -728,6 +775,25 @@ static const u16 mt8195_mutex_sof[DDP_MUTEX_SOF_MAX] = {
 		MT8195_MUTEX_SOF_DP_INTF0 | MT8195_MUTEX_EOF_DP_INTF0,
 	[MUTEX_SOF_DP_INTF1] =
 		MT8195_MUTEX_SOF_DP_INTF1 | MT8195_MUTEX_EOF_DP_INTF1,
+};
+
+static const struct mtk_mutex_data mt6755_mutex_driver_data = {
+	.mutex_mod = mt6755_mutex_mod,
+	.mutex_sof = mt6755_mutex_sof,
+	.mutex_mod_reg = MT2701_MUTEX0_MOD0,
+	.mutex_mod1_reg = MT2701_MUTEX0_MOD1,
+	.mutex_sof_reg = MT2701_MUTEX0_SOF0,
+	/*
+	 * m681: the mt6755 mmsys clock driver (clk-mt6755-mm.c) does not expose
+	 * the stock "mutex_32k" gate (it is not in mediatek,mt6755-clk.h), and the
+	 * mutex@14014000 DT node therefore has no `clocks`. Without no_clk the
+	 * driver's devm_clk_get(NULL) fails -ENOENT -> probe fails -> mediatek-drm
+	 * gets a never-bound mutex and the DDP path wedges. The DISP MTCMOS domain
+	 * is kept powered (pd_ignore_unused) and SMI_COMMON is CLK_IS_CRITICAL, so
+	 * the mutex_32k that LK enabled stays on; treat the mutex clock as implicit
+	 * like mt8167. (Proper fix: add the mutex_32k gate to clk-mt6755-mm.c.)
+	 */
+	.no_clk = true,
 };
 
 static const struct mtk_mutex_data mt2701_mutex_driver_data = {
@@ -1132,6 +1198,7 @@ static int mtk_mutex_probe(struct platform_device *pdev)
 static const struct of_device_id mutex_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt2701-disp-mutex", .data = &mt2701_mutex_driver_data },
 	{ .compatible = "mediatek,mt2712-disp-mutex", .data = &mt2712_mutex_driver_data },
+	{ .compatible = "mediatek,mt6755-disp-mutex", .data = &mt6755_mutex_driver_data },
 	{ .compatible = "mediatek,mt6795-disp-mutex", .data = &mt6795_mutex_driver_data },
 	{ .compatible = "mediatek,mt8167-disp-mutex", .data = &mt8167_mutex_driver_data },
 	{ .compatible = "mediatek,mt8173-disp-mutex", .data = &mt8173_mutex_driver_data },

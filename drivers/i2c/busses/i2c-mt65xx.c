@@ -1457,6 +1457,14 @@ static int mtk_i2c_probe(struct platform_device *pdev)
 
 	strscpy(i2c->adap.name, I2C_DRV_NAME, sizeof(i2c->adap.name));
 
+	/*
+	 * m681/MT6755 note: an earlier bring-up clamp pinned the source to
+	 * 136 MHz because the platform clk driver's PLL recalc reported
+	 * garbage (~3 GHz). Since the PLL rate fields were fixed (r73,
+	 * silicon-verified: infra_i2c0 = i2c_sel = syspll1_d8 = 68.25 MHz,
+	 * identical in stock TWRP), clk_get_rate() is truthful and the
+	 * clamp only halved every programmed SCL. Dropped.
+	 */
 	mtk_i2c_set_speed(i2c, clk_get_rate(i2c->clocks[speed_clk].clk));
 
 	if (i2c->dev_comp->max_dma_support > 32) {

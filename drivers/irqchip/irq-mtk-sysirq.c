@@ -4,6 +4,7 @@
  * Author: Joe.C <yingjoe.chen@mediatek.com>
  */
 
+#include <linux/arm-smccc.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
 #include <linux/irqdomain.h>
@@ -14,10 +15,19 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
+/*
+ * m681/MT6755 (Meizu ATF): the INT_POL registers are write-protected from the
+ * non-secure world; the stock 3.18 kernel routes the write through this SIP
+ * SMC with the PHYSICAL register address (mt_secure_api.h
+ * mcusys_smc_write_phy). See mtk_sysirq_set_type().
+ */
+#define MTK_SIP_KERNEL_MCUSYS_WRITE	0x82000201
+
 struct mtk_sysirq_chip_data {
 	raw_spinlock_t lock;
 	u32 nr_intpol_bases;
 	void __iomem **intpol_bases;
+	phys_addr_t *intpol_phys;
 	u32 *intpol_words;
 	u8 *intpol_idx;
 	u16 *which_word;
@@ -50,6 +60,27 @@ static int mtk_sysirq_set_type(struct irq_data *data, unsigned int type)
 	}
 
 	writel_relaxed(value, base + reg_index * 4);
+
+	/*
+	 * m681: the plain MMIO write above is silently dropped (the INT_POL
+	 * range is secure-world-only on this device), so LEVEL_LOW SPIs keep
+	 * polarity 0: the GIC (active-high only) then sees the IDLE line as
+	 * asserted — a phantom interrupt storm while idle (mtu3 SPI123 at
+	 * ~150k/s, DDP OVL/RDMA at handoff) — and real active-low asserts are
+	 * LOST (DSI VM_DONE waits time out). Detect the dropped write by
+	 * readback and redo it via the stock SIP SMC with the physical address,
+	 * exactly like the vendor 3.18 kernel (mcusys_smc_write_phy).
+	 */
+	if (readl_relaxed(base + reg_index * 4) != value) {
+		struct arm_smccc_res res;
+
+		arm_smccc_smc(MTK_SIP_KERNEL_MCUSYS_WRITE,
+			      chip_data->intpol_phys[intpol_idx] + reg_index * 4,
+			      value, 0, 0, 0, 0, 0, &res);
+		if (readl_relaxed(base + reg_index * 4) != value)
+			pr_warn_once("mtk_sysirq: INT_POL write failed even via SMC (hwirq %lu)\n",
+				     hwirq);
+	}
 
 	data = data->parent_data;
 	ret = data->chip->irq_set_type(data, type);
@@ -162,6 +193,15 @@ static int __init mtk_sysirq_of_init(struct device_node *node,
 		goto out_free_intpol_words;
 	}
 
+	/* m681: physical bases for the secure-world SMC fallback (set_type) */
+	chip_data->intpol_phys = kcalloc(nr_intpol_bases,
+					 sizeof(*chip_data->intpol_phys),
+					 GFP_KERNEL);
+	if (!chip_data->intpol_phys) {
+		ret = -ENOMEM;
+		goto out_free_intpol;
+	}
+
 	for (i = 0; i < nr_intpol_bases; i++) {
 		struct resource res;
 
@@ -169,6 +209,7 @@ static int __init mtk_sysirq_of_init(struct device_node *node,
 		size = resource_size(&res);
 		intpol_num += size * 8;
 		chip_data->intpol_words[i] = size / 4;
+		chip_data->intpol_phys[i] = res.start;
 		chip_data->intpol_bases[i] = of_iomap(node, i);
 		if (ret || !chip_data->intpol_bases[i]) {
 			pr_err("%pOF: couldn't map region %d\n", node, i);

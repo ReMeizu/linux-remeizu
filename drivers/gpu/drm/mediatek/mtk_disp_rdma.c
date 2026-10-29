@@ -86,6 +86,8 @@ struct mtk_disp_rdma {
 	void				(*vblank_cb)(void *data);
 	void				*vblank_cb_data;
 	u32				fifo_size;
+	int				irq;
+	bool				vblank_enabled;
 };
 
 static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
@@ -133,13 +135,26 @@ void mtk_rdma_unregister_vblank_cb(struct device *dev)
 
 void mtk_rdma_enable_vblank(struct device *dev)
 {
+	struct mtk_disp_rdma *rdma = dev_get_drvdata(dev);
+
+	if (!rdma->vblank_enabled) {
+		enable_irq(rdma->irq);
+		rdma->vblank_enabled = true;
+	}
 	rdma_update_bits(dev, DISP_REG_RDMA_INT_ENABLE, RDMA_FRAME_END_INT,
 			 RDMA_FRAME_END_INT);
 }
 
 void mtk_rdma_disable_vblank(struct device *dev)
 {
+	struct mtk_disp_rdma *rdma = dev_get_drvdata(dev);
+
 	rdma_update_bits(dev, DISP_REG_RDMA_INT_ENABLE, RDMA_FRAME_END_INT, 0);
+	if (rdma->vblank_enabled) {
+		/* .disable_vblank runs under vbl_lock (atomic) -> _nosync */
+		disable_irq_nosync(rdma->irq);
+		rdma->vblank_enabled = false;
+	}
 }
 
 const u32 *mtk_rdma_get_formats(struct device *dev)
@@ -353,6 +368,17 @@ static int mtk_disp_rdma_probe(struct platform_device *pdev)
 			       IRQF_TRIGGER_NONE, dev_name(dev), priv);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to request irq %d\n", irq);
+
+	/*
+	 * m681 warm handoff: like the OVL, keep the RDMA frame-end IRQ masked at
+	 * the GIC until the driver enables vblank. LK hands off with the DDP
+	 * scanning, and mtk_crtc registers mtk_crtc_ddp_irq as the vblank cb on
+	 * every comp (OVL and RDMA), so a bootloader-left RDMA frame IRQ reaches
+	 * mtk_crtc_ddp_irq -> mtk_crtc_ddp_config before the CRTC is set up and
+	 * NULL-derefs. mtk_rdma_enable_vblank() re-enables it at modeset.
+	 */
+	priv->irq = irq;
+	disable_irq(irq);
 
 	priv->data = of_device_get_match_data(dev);
 

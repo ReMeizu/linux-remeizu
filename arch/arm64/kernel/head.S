@@ -86,6 +86,23 @@ SYM_CODE_START(primary_entry)
 	bl	record_mmu_state
 	bl	preserve_boot_args
 
+	/*
+	 * Meizu m681 (MT6755) bring-up breadcrumb: mark kernel entry in
+	 * SPM_SW_RSV (phys 0x10006608, "FRGE" tag at 0x10006610). Only
+	 * safe with the MMU off (x19 == 0), which is how the stock lk
+	 * enters the kernel. See also m681_spm_mark() in setup.c.
+	 */
+	cbnz	x19, .Lm681_no_marker
+	movz	x8, #0x6608
+	movk	x8, #0x1000, lsl #16
+	movz	w9, #0x0001
+	movk	w9, #0xf681, lsl #16
+	str	w9, [x8]
+	movz	w9, #0x4745
+	movk	w9, #0x4652, lsl #16
+	str	w9, [x8, #8]
+.Lm681_no_marker:
+
 	adrp	x1, early_init_stack
 	mov	sp, x1
 	mov	x29, xzr
