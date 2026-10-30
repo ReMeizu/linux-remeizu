@@ -23,28 +23,76 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x100>;
-			enable-method = "psci";
+			enable-method = "mt-boot";
+			cpu-release-addr = <0x0 0x40000200>;
 		};
 
 		cpu5: cpu@101 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x101>;
-			enable-method = "psci";
+			enable-method = "mt-boot";
+			cpu-release-addr = <0x0 0x40000200>;
 		};
 
 		cpu6: cpu@102 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x102>;
-			enable-method = "psci";
+			enable-method = "mt-boot";
+			cpu-release-addr = <0x0 0x40000200>;
 		};
 
 		cpu7: cpu@103 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x103>;
-			enable-method = "psci";
+			enable-method = "mt-boot";
+			cpu-release-addr = <0x0 0x40000200>;
 		};
 	};
+
+	/*
+	 * System Power Manager (SPM): CPU MTCMOS control for the "mt-boot"
+	 * SMP method.  Same block and layout as the downstream "SLEEP" node
+	 * (arch/arm64/boot/dts/mt6753.dtsi:318-325: compatible
+	 * "mediatek,SLEEP", reg <0x10006000 0x1000>, no clocks; the SPM bus
+	 * clock is enabled by the bootloader and there is no clock gate for
+	 * it in the vendor DT).
+	 */
+	spm: spm@10006000 {
+		compatible = "mediatek,mt6753-spm";
+		reg = <0 0x10006000 0 0x1000>;
+	};
+};
+
+/*
+ * Cluster 0 is described in the shared mt6735.dtsi, which is also used by
+ * the four-core MT6735/MT6737M boards that boot through plain PSCI.  The
+ * downstream MT6753 DTS puts every core on "mt-boot" (PSCI CPU_ON + SPM
+ * MTCMOS power-on), and the BSP assumes the preloader leaves all
+ * non-boot cores powered off; the MT6735-family BL31 images we could
+ * check do not touch the SPM block either.  cpu-release-addr is kept for
+ * parity with the vendor DT
+ * (arch/arm64/boot/dts/mt6753.dtsi:58-135); BL31 gets the real entrypoint
+ * through the PSCI CPU_ON SMC call.
+ */
+&cpu0 {
+	enable-method = "mt-boot";
+	cpu-release-addr = <0x0 0x40000200>;
+};
+
+&cpu1 {
+	enable-method = "mt-boot";
+	cpu-release-addr = <0x0 0x40000200>;
+};
+
+&cpu2 {
+	enable-method = "mt-boot";
+	cpu-release-addr = <0x0 0x40000200>;
+};
+
+&cpu3 {
+	enable-method = "mt-boot";
+	cpu-release-addr = <0x0 0x40000200>;
 };
