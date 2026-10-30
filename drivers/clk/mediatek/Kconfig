@@ -149,6 +149,15 @@ config COMMON_CLK_MT6755_MMSYS
 	  This driver supports MediaTek MT6755 mmsys clock gates
 	  (CG0 0x100 / CG1 0x110), required by the display subsystem.
 
+config COMMON_CLK_MT6735_MMSYS
+	tristate "Clock driver for MediaTek MT6735 mmsys"
+	depends on COMMON_CLK_MT6735
+	help
+	  This driver supports the MediaTek MT6735 MMSYS clock gates,
+	  with the DISP0 group at 0x100 and the DISP1 group at 0x110.
+	  They are required by the display subsystem (OVL, RDMA, COLOR,
+	  CCORR, AAL, GAMMA, DITHER and the two DSI gates).
+
 config COMMON_CLK_MT6735_IMGSYS
 	tristate "Clock driver for MediaTek MT6735 imgsys"
 	depends on COMMON_CLK_MT6735

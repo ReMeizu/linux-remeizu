@@ -9,10 +9,12 @@
 #include <linux/delay.h>
 #include <linux/iopoll.h>
 #include <linux/irq.h>
+#include <linux/mfd/syscon.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+#include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/units.h>
 
@@ -202,6 +204,14 @@ struct mtk_dsi_driver_data {
 	 * vertical bar garbage once the kernel owns the panel.
 	 */
 	bool stock_vdo_wc;
+	/*
+	 * m681 only: the stock trigger path adds a clock-lane LP overhead of
+	 * +32/+28 to HBP/HFP word counts, forces HSTX_CKLP_EN and pins
+	 * HSTX_CKL_WC to 0xd80 (all observed in the live TWRP silicon dump for
+	 * the 1080-wide panel).  None of this is in the vendor ddp_dsi.c
+	 * arithmetic, so MT6735 must not inherit it.
+	 */
+	bool m681_vdo_quirks;
 };
 
 struct mtk_dsi {
@@ -218,6 +228,14 @@ struct mtk_dsi {
 	struct clk *engine_clk;
 	struct clk *digital_clk;
 	struct clk *hs_clk;
+
+	/*
+	 * MT6735 (m5c): the panel reset is not a GPIO but the MMSYS
+	 * DISP_REG_CONFIG_MMSYS_LCM_RST_B bit at MMSYS+0x150.  Optional and
+	 * only used when the DT asks for it.
+	 */
+	struct regmap *mmsys_regmap;
+	bool lcm_reset_mmsys;
 
 	u32 data_rate;
 	u32 data_rate_override;	/* board DT "mediatek,data-rate" (m681: 960M) */
@@ -456,8 +474,8 @@ static void mtk_dsi_rxtx_control(struct mtk_dsi *dsi)
 	if (dsi->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS)
 		regval |= HSTX_CKLP_EN;
 
-	/* stock silicon (TWRP dump): TXRX_CTRL = 0x0001003c — CKLP set */
-	if (dsi->driver_data->stock_vdo_wc)
+	/* m681 silicon (TWRP dump): TXRX_CTRL = 0x0001003c — CKLP set */
+	if (dsi->driver_data->m681_vdo_quirks)
 		regval |= HSTX_CKLP_EN;
 
 	if (dsi->mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET)
@@ -501,12 +519,12 @@ static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 		vact_nl = FIELD_PREP(VACT_NL, dsi->vm.vactive);
 		writel(vact_nl, dsi->regs + DSI_VACT_NL);
 		/*
-		 * stock silicon (TWRP dump): HSTX_CKL_WC = 0xd80 (3456), not
-		 * the bare pixel-stream word count (0xca8) — the stock value
-		 * includes the horizontal blanking share for the clock-lane
-		 * LP window.
+		 * m681 silicon (TWRP dump): HSTX_CKL_WC = 0xd80 (3456) for the
+		 * 1080-wide panel, not the bare pixel-stream word count.  The
+		 * vendor driver computes this from the actual timing; MT6735
+		 * uses the upstream value (UNPROVEN for the m5c panel).
 		 */
-		if (dsi->driver_data->stock_vdo_wc)
+		if (dsi->driver_data->m681_vdo_quirks)
 			writel(0xd80, dsi->regs + DSI_HSTX_CKL_WC);
 		else
 			writel(ps_wc, dsi->regs + DSI_HSTX_CKL_WC);
@@ -626,9 +644,12 @@ static void mtk_dsi_config_vdo_timing_per_line_lp(struct mtk_dsi *dsi)
 		 * and HFP_WC 228 where the base DSI_Config_VDO_Timing()
 		 * formulas give 224/200 — the stock trigger path adds a
 		 * clock-lane LP per-line overhead of +32/+28. Match silicon.
+		 * m681 only; MT6735 uses the base vendor arithmetic.
 		 */
-		horizontal_backporch_byte += 32;
-		horizontal_frontporch_byte += 28;
+		if (dsi->driver_data->m681_vdo_quirks) {
+			horizontal_backporch_byte += 32;
+			horizontal_frontporch_byte += 28;
+		}
 
 		writel(horizontal_sync_active_byte, dsi->regs + DSI_HSA_WC);
 		writel(horizontal_backporch_byte, dsi->regs + DSI_HBP_WC);
@@ -842,6 +863,29 @@ static s32 mtk_dsi_switch_to_cmd_mode(struct mtk_dsi *dsi, u8 irq_flag, u32 t)
 	}
 }
 
+/*
+ * MT6735/m5c: DISP_REG_CONFIG_MMSYS_LCM_RST_B is MMSYS+0x150 bit 0 and is
+ * active low.  Stock lcm_init() pulses it 1 -> 0 -> 1 with 2/10/120 ms and
+ * only then pushes the panel init table.  Do the same here, after the DSI
+ * host and PHY are powered and configured, and before the panel's prepare()
+ * runs (ili9881c sets prepare_prev_first, so the bridge pre_enables first).
+ *
+ * UNPROVEN on hardware: the bit polarity/position comes from the vendor
+ * ddp_reg.h and ddp_dsi.c, not from a live m5c register dump.
+ */
+static void mtk_dsi_mmsys_lcm_reset(struct mtk_dsi *dsi)
+{
+	if (!dsi->lcm_reset_mmsys || !dsi->mmsys_regmap)
+		return;
+
+	regmap_update_bits(dsi->mmsys_regmap, 0x150, BIT(0), BIT(0));
+	usleep_range(2000, 2500);
+	regmap_update_bits(dsi->mmsys_regmap, 0x150, BIT(0), 0);
+	usleep_range(10000, 11000);
+	regmap_update_bits(dsi->mmsys_regmap, 0x150, BIT(0), BIT(0));
+	msleep(120);
+}
+
 static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 {
 	struct device *dev = dsi->host.dev;
@@ -905,6 +949,9 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 	mtk_dsi_set_interrupt_enable(dsi);
 	mtk_dsi_lane_ready(dsi);
 	mtk_dsi_set_cmd_mode(dsi);
+
+	/* MT6735: release the panel from reset through MMSYS, not a GPIO. */
+	mtk_dsi_mmsys_lcm_reset(dsi);
 
 	return 0;
 err_disable_engine_clk:
@@ -1388,6 +1435,21 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	of_property_read_u32(dev->of_node, "mediatek,data-rate",
 			     &dsi->data_rate_override);
 
+	/*
+	 * MT6735: optional panel reset through MMSYS+0x150.  The DSI node
+	 * points at the mmsys syscon with "mediatek,mmsys" and opts in with
+	 * "mediatek,lcm-reset-in-mmsys".
+	 */
+	dsi->lcm_reset_mmsys =
+		of_property_read_bool(dev->of_node, "mediatek,lcm-reset-in-mmsys");
+	if (dsi->lcm_reset_mmsys) {
+		dsi->mmsys_regmap =
+			syscon_regmap_lookup_by_phandle(dev->of_node, "mediatek,mmsys");
+		if (IS_ERR(dsi->mmsys_regmap))
+			return dev_err_probe(dev, PTR_ERR(dsi->mmsys_regmap),
+					     "Failed to get mmsys regmap for panel reset\n");
+	}
+
 	dsi->engine_clk = devm_clk_get(dev, "engine");
 	if (IS_ERR(dsi->engine_clk))
 		return dev_err_probe(dev, PTR_ERR(dsi->engine_clk),
@@ -1468,6 +1530,21 @@ static const struct mtk_dsi_driver_data mt6755_dsi_driver_data = {
 	.reg_vm_cmd_off = 0x130,
 	.reg_shadow_dbg_off = 0x190,
 	.stock_vdo_wc = true,
+	.m681_vdo_quirks = true,
+};
+
+/*
+ * MT6735/MT6737M (m5c): DSI register block is offset-identical to mt6755.
+ * Vendor ddp_reg.h (video/mt6735/dispsys/mt6735m) has no SIZE_CON (0x38 is
+ * rsv_38), the CMDQ at DSI0+0x200, VM_CMD_CON at 0x130 and the same
+ * STATIC_ASSERTs at 0x2c/0x100/0x104/0x11c/0x17c.  Stock DSI_Config_VDO_Timing()
+ * uses the plain vendor arithmetic, without the m681 +32/+28 shave.
+ */
+static const struct mtk_dsi_driver_data mt6735_dsi_driver_data = {
+	.reg_cmdq_off = 0x200,
+	.reg_vm_cmd_off = 0x130,
+	.reg_shadow_dbg_off = 0x190,
+	.stock_vdo_wc = true,
 };
 
 static const struct mtk_dsi_driver_data mt2701_dsi_driver_data = {
@@ -1495,6 +1572,7 @@ static const struct mtk_dsi_driver_data mt6797_dsi_driver_data = {
 	.reg_vm_cmd_off = 0x130,
 	.reg_shadow_dbg_off = 0x190,
 	.stock_vdo_wc = true,
+	.m681_vdo_quirks = true,
 };
 
 static const struct mtk_dsi_driver_data mt8183_dsi_driver_data = {
@@ -1527,6 +1605,7 @@ static const struct of_device_id mtk_dsi_of_match[] = {
 	{ .compatible = "mediatek,mt2701-dsi", .data = &mt2701_dsi_driver_data },
 	{ .compatible = "mediatek,mt8167-dsi", .data = &mt2701_dsi_driver_data },
 	{ .compatible = "mediatek,mt6755-dsi", .data = &mt6755_dsi_driver_data },
+	{ .compatible = "mediatek,mt6735-dsi", .data = &mt6735_dsi_driver_data },
 	{ .compatible = "mediatek,mt6797-dsi", .data = &mt6797_dsi_driver_data },
 	{ .compatible = "mediatek,mt8173-dsi", .data = &mt8173_dsi_driver_data },
 	{ .compatible = "mediatek,mt8183-dsi", .data = &mt8183_dsi_driver_data },

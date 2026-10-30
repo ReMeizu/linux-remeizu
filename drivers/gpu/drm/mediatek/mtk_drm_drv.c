@@ -348,6 +348,30 @@ static const struct mtk_mmsys_driver_data mt6755_mmsys_driver_data = {
 };
 
 /*
+ * MT6735/MT6737M primary path from the vendor DDP scenario table
+ * (video/mt6735/dispsys/mt6735m/ddp_reg.h:36-41 and ddp_path.c,
+ * DDP_SCENARIO_PRIMARY_DISP): OVL0 -> COLOR0 -> CCORR -> AAL -> GAMMA ->
+ * DITHER -> RDMA0 -> DSI0.  One OVL, no cascade and no UFOE; PWM0 is a
+ * backlight helper (module_can_connect[PWM0] = 0), not a pixel stage.
+ */
+static const unsigned int mt6735_mtk_ddp_main[] = {
+	DDP_COMPONENT_OVL0,
+	DDP_COMPONENT_COLOR0,
+	DDP_COMPONENT_CCORR,
+	DDP_COMPONENT_AAL0,
+	DDP_COMPONENT_GAMMA,
+	DDP_COMPONENT_DITHER0,
+	DDP_COMPONENT_RDMA0,
+	DDP_COMPONENT_DSI0,
+};
+
+static const struct mtk_mmsys_driver_data mt6735_mmsys_driver_data = {
+	.main_path = mt6735_mtk_ddp_main,
+	.main_len = ARRAY_SIZE(mt6735_mtk_ddp_main),
+	.mmsys_dev_num = 1,
+};
+
+/*
  * MT6797 primary display path, from the vendor DDP scenario table
  * (meizu_mx6_m95 dispsys/ddp_path.c lines 70-77, DDP_SCENARIO_PRIMARY_DISP):
  * OVL0 -> OVL0_2L -> OVL1_2L -> OVL0_VIRTUAL -> COLOR0 -> CCORR -> AAL ->
@@ -386,6 +410,8 @@ static const struct mtk_mmsys_driver_data mt6797_mmsys_driver_data = {
 static const struct of_device_id mtk_drm_of_ids[] = {
 	{ .compatible = "mediatek,mt6755-mmsys",
 	  .data = &mt6755_mmsys_driver_data},
+	{ .compatible = "mediatek,mt6735-mmsys",
+	  .data = &mt6735_mmsys_driver_data},
 	{ .compatible = "mediatek,mt6797-mmsys",
 	  .data = &mt6797_mmsys_driver_data},
 	{ .compatible = "mediatek,mt2701-mmsys",

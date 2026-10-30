@@ -5,6 +5,7 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/mediatek,mt6735-clk.h>
 #include <dt-bindings/clock/mediatek,mt6735-infracfg.h>
 #include <dt-bindings/clock/mediatek,mt6735-pericfg.h>
 #include <dt-bindings/clock/mediatek,mt6735-topckgen.h>
@@ -466,6 +467,137 @@
 
 
 
+		};
+
+		/*
+		 * MMSYS display subsystem.  Addresses and interrupts are from
+		 * the vendor 4.9 tree (mt6735m.dts dispsys node and
+		 * mt6735m/ddp_reg.h ddp_reg_pa_base / ddp_irq_num); register
+		 * layouts are pinned per node by the compatible fallback.
+		 *
+		 * No power-domains yet: mainline mt6735.dtsi has no scpsys
+		 * node.  All nodes stay disabled until a board enables them.
+		 */
+		mmsys: syscon@14000000 {
+			compatible = "mediatek,mt6735-mmsys", "syscon";
+			reg = <0 0x14000000 0 0x1000>;
+			#clock-cells = <1>;
+			status = "disabled";
+		};
+
+		mutex: mutex@14015000 {
+			compatible = "mediatek,mt6735-disp-mutex";
+			reg = <0 0x14015000 0 0x1000>;
+			interrupts = <GIC_SPI 186 IRQ_TYPE_LEVEL_LOW>;
+			status = "disabled";
+		};
+
+		ovl0: ovl@14007000 {
+			/* L0_ADDR 0xf40, 4 layers: mt8173 layout */
+			compatible = "mediatek,mt6735-disp-ovl",
+				     "mediatek,mt8173-disp-ovl";
+			reg = <0 0x14007000 0 0x1000>;
+			interrupts = <GIC_SPI 193 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_OVL0>;
+			status = "disabled";
+		};
+
+		rdma0: rdma@14009000 {
+			/* MEM_START_ADDR 0xf00 == mt8173 */
+			compatible = "mediatek,mt6735-disp-rdma",
+				     "mediatek,mt8173-disp-rdma";
+			reg = <0 0x14009000 0 0x1000>;
+			interrupts = <GIC_SPI 195 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_RDMA0>;
+			status = "disabled";
+		};
+
+		color0: color@1400c000 {
+			compatible = "mediatek,mt6735-disp-color",
+				     "mediatek,mt8173-disp-color";
+			reg = <0 0x1400c000 0 0x1000>;
+			interrupts = <GIC_SPI 198 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_COLOR>;
+			status = "disabled";
+		};
+
+		ccorr0: ccorr@1400d000 {
+			/* EN 0x00 / CFG 0x20 / SIZE 0x30 / COEF_0 0x80 == mt8183 */
+			compatible = "mediatek,mt6735-disp-ccorr",
+				     "mediatek,mt8183-disp-ccorr";
+			reg = <0 0x1400d000 0 0x1000>;
+			interrupts = <GIC_SPI 199 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_CCORR>;
+			status = "disabled";
+		};
+
+		aal0: aal@1400e000 {
+			compatible = "mediatek,mt6735-disp-aal",
+				     "mediatek,mt8173-disp-aal";
+			reg = <0 0x1400e000 0 0x1000>;
+			interrupts = <GIC_SPI 200 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_AAL>;
+			status = "disabled";
+		};
+
+		gamma0: gamma@1400f000 {
+			compatible = "mediatek,mt6735-disp-gamma",
+				     "mediatek,mt8173-disp-gamma";
+			reg = <0 0x1400f000 0 0x1000>;
+			interrupts = <GIC_SPI 201 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_GAMMA>;
+			status = "disabled";
+		};
+
+		dither0: dither@14010000 {
+			/* EN 0x00 / CFG 0x20 / SIZE 0x30 == mt8183 */
+			compatible = "mediatek,mt6735-disp-dither",
+				     "mediatek,mt8183-disp-dither";
+			reg = <0 0x14010000 0 0x1000>;
+			interrupts = <GIC_SPI 202 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_DITHER>;
+			status = "disabled";
+		};
+
+		dsi0: dsi@14012000 {
+			compatible = "mediatek,mt6735-dsi", "mediatek,mt8173-dsi";
+			reg = <0 0x14012000 0 0x1000>;
+			interrupts = <GIC_SPI 204 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP1_DSI_ENGINE>,
+				 <&mmsys CLK_MM_DISP1_DSI_DIGITAL>,
+				 <&mipi_tx0>;
+			clock-names = "engine", "digital", "hs";
+			phys = <&mipi_tx0>;
+			phy-names = "dphy";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		/*
+		 * Vendor MIPI_TX_CONFIG@0x14018000.  The vendor register dump
+		 * in ddp_reg.h (CON 0x00, lanes 0x04-0x14, TOP_CON 0x40,
+		 * BG_CON 0x44, PLL_CON0-3 0x50-0x5c, SW_CTRL 0x80) matches
+		 * mt8173 offset for offset.
+		 */
+		mipi_tx0: dsi-phy@14018000 {
+			compatible = "mediatek,mt8173-mipi-tx";
+			reg = <0 0x14018000 0 0x1000>;
+			clocks = <&clk26m>;
+			clock-output-names = "mipi_tx0_pll";
+			#clock-cells = <0>;
+			#phy-cells = <0>;
+			status = "disabled";
+		};
+
+		disp_pwm0: pwm@1100e000 {
+			compatible = "mediatek,mt8173-disp-pwm";
+			reg = <0 0x1100e000 0 0x1000>;
+			#pwm-cells = <2>;
+			clocks = <&pericfg CLK_PERI_DISP_PWM>,
+				 <&pericfg CLK_PERI_DISP_PWM>;
+			clock-names = "main", "mm";
+			status = "disabled";
 		};
 
 		mmc0: mmc@11230000 {

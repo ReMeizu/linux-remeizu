@@ -79,6 +79,20 @@
 #define MT8167_MUTEX_MOD_DISP_DITHER		15
 #define MT8167_MUTEX_MOD_DISP_UFOE		16
 
+/*
+ * MT6735/MT6737M mod bits, from the vendor module_mutex_map[]
+ * (video/mt6735/dispsys/mt6735m/ddp_reg.h:133-147).  OVL1 and UFOE are -1
+ * (not routed to a mutex) on this SoC; PWM0 is bit 17.
+ */
+#define MT6735_MUTEX_MOD_DISP_OVL0		6
+#define MT6735_MUTEX_MOD_DISP_RDMA0		8
+#define MT6735_MUTEX_MOD_DISP_CCORR		11
+#define MT6735_MUTEX_MOD_DISP_COLOR		12
+#define MT6735_MUTEX_MOD_DISP_AAL		13
+#define MT6735_MUTEX_MOD_DISP_GAMMA		14
+#define MT6735_MUTEX_MOD_DISP_DITHER		15
+#define MT6735_MUTEX_MOD_DISP_PWM		17
+
 #define MT8192_MUTEX_MOD_DISP_OVL0		0
 #define MT8192_MUTEX_MOD_DISP_OVL0_2L		1
 #define MT8192_MUTEX_MOD_DISP_RDMA0		2
@@ -439,6 +453,17 @@ static const u8 mt6797_mutex_mod[DDP_COMPONENT_ID_MAX] = {
 	[DDP_COMPONENT_UFOE] = MT6797_MUTEX_MOD_DISP_UFOE,
 	[DDP_COMPONENT_WDMA0] = MT6797_MUTEX_MOD_DISP_WDMA0,
 	[DDP_COMPONENT_WDMA1] = MT6797_MUTEX_MOD_DISP_WDMA1,
+};
+
+static const u8 mt6735_mutex_mod[DDP_COMPONENT_ID_MAX] = {
+	[DDP_COMPONENT_AAL0] = MT6735_MUTEX_MOD_DISP_AAL,
+	[DDP_COMPONENT_CCORR] = MT6735_MUTEX_MOD_DISP_CCORR,
+	[DDP_COMPONENT_COLOR0] = MT6735_MUTEX_MOD_DISP_COLOR,
+	[DDP_COMPONENT_DITHER0] = MT6735_MUTEX_MOD_DISP_DITHER,
+	[DDP_COMPONENT_GAMMA] = MT6735_MUTEX_MOD_DISP_GAMMA,
+	[DDP_COMPONENT_OVL0] = MT6735_MUTEX_MOD_DISP_OVL0,
+	[DDP_COMPONENT_PWM0] = MT6735_MUTEX_MOD_DISP_PWM,
+	[DDP_COMPONENT_RDMA0] = MT6735_MUTEX_MOD_DISP_RDMA0,
 };
 
 static const u8 mt6755_mutex_mod[DDP_COMPONENT_ID_MAX] = {
@@ -830,6 +855,20 @@ static const struct mtk_mutex_data mt6797_mutex_driver_data = {
 	.mutex_mod_reg = MT2701_MUTEX0_MOD0,
 	.mutex_mod1_reg = MT2701_MUTEX0_MOD1,
 	.mutex_sof_reg = MT2701_MUTEX0_SOF0,
+};
+
+/*
+ * MT6735/MT6737M: mutex registers at 0x20/0x2c/0x30 are MT2701-compatible.
+ * No mutex_32k gate is exposed by clk-mt6735-mm, so the clock is implicit
+ * (same bring-up arrangement as mt8167/mt6755).
+ */
+static const struct mtk_mutex_data mt6735_mutex_driver_data = {
+	.mutex_mod = mt6735_mutex_mod,
+	.mutex_sof = mt6795_mutex_sof,
+	.mutex_mod_reg = MT2701_MUTEX0_MOD0,
+	.mutex_mod1_reg = MT2701_MUTEX0_MOD1,
+	.mutex_sof_reg = MT2701_MUTEX0_SOF0,
+	.no_clk = true,
 };
 
 static const struct mtk_mutex_data mt6755_mutex_driver_data = {
@@ -1254,6 +1293,7 @@ static const struct of_device_id mutex_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt2701-disp-mutex", .data = &mt2701_mutex_driver_data },
 	{ .compatible = "mediatek,mt2712-disp-mutex", .data = &mt2712_mutex_driver_data },
 	{ .compatible = "mediatek,mt6755-disp-mutex", .data = &mt6755_mutex_driver_data },
+	{ .compatible = "mediatek,mt6735-disp-mutex", .data = &mt6735_mutex_driver_data },
 	{ .compatible = "mediatek,mt6797-disp-mutex", .data = &mt6797_mutex_driver_data },
 	{ .compatible = "mediatek,mt6795-disp-mutex", .data = &mt6795_mutex_driver_data },
 	{ .compatible = "mediatek,mt8167-disp-mutex", .data = &mt8167_mutex_driver_data },

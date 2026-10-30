@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /dts-v1/;
 
+#include <dt-bindings/gpio/gpio.h>
+
 #include "mt6737m.dtsi"
 #include "mt6328.dtsi"
 
@@ -11,6 +13,17 @@
 	aliases {
 		serial0 = &uart0;
 		mmc0 = &mmc0;
+	};
+
+	/*
+	 * Backlight on DISP_PWM channel 0.
+	 * UNPROVEN: the stock board only provides led_mode = <5> and
+	 * pwm_config = <0 0 0 0 0>; the 20 kHz period is a placeholder and
+	 * the PWM output pin/pinmux is not known yet.
+	 */
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&disp_pwm0 0 50000>;
 	};
 
 	chosen {
@@ -73,6 +86,146 @@
 			alloc-ranges = <0 0x80000000 0 0x3f330000>;
 		};
 	};
+};
+
+/*
+ * Display skeleton for the m5c (MT6737M).  All register data comes from the
+ * vendor 4.9 tree; this has never been run on hardware.  There is no
+ * power-domains/scpsys node yet and no SMI larb0/iommu, so the DISP domain
+ * and the SMI gates are left as LK configured them.
+ */
+&mmsys {
+	status = "okay";
+};
+
+&mutex {
+	status = "okay";
+};
+
+&ovl0 {
+	status = "okay";
+};
+
+&rdma0 {
+	status = "okay";
+};
+
+&color0 {
+	status = "okay";
+};
+
+&ccorr0 {
+	status = "okay";
+};
+
+&aal0 {
+	status = "okay";
+};
+
+&gamma0 {
+	status = "okay";
+};
+
+&dither0 {
+	status = "okay";
+};
+
+/*
+ * DSI0: the panel reset is MMSYS+0x150 bit 0 (LCM_RST_B), not a GPIO, see
+ * the mtk_dsi quirk.  Panel timing/init table live in
+ * panel-ilitek-ili9881c.c (ilitek,ili9881c-dj-hd720).
+ */
+&dsi0 {
+	status = "okay";
+	mediatek,mmsys = <&mmsys>;
+	mediatek,lcm-reset-in-mmsys;
+
+	port {
+		dsi0_out: endpoint {
+			remote-endpoint = <&panel_in>;
+		};
+	};
+
+	panel@0 {
+		compatible = "ilitek,ili9881c-dj-hd720";
+		reg = <0>;
+
+		/*
+		 * UNPROVEN: VGP1 is what the vendor switches in lcm_init_power()
+		 * and is used here as the bias chip VIN; the panel VDDI/IOVCC is
+		 * assumed to be the always-on VIO18 rail.  The panel driver only
+		 * models one supply.
+		 */
+		power-supply = <&mt6328_vio18_reg>;
+		backlight = <&backlight>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
+};
+
+&mipi_tx0 {
+	status = "okay";
+};
+
+&disp_pwm0 {
+	status = "okay";
+};
+
+&i2c1 {
+	status = "okay";
+
+	/*
+	 * TPS65132 bias.  Vendor: i2c1 0x3e, ENP GPIO64, ENN GPIO63, both
+	 * driven high to enable (bridge-stock.dts:2327-2368).
+	 */
+	bias: regulator@3e {
+		compatible = "ti,tps65132";
+		reg = <0x3e>;
+		vin-supply = <&mt6328_vgp1_reg>;
+
+		outp {
+			regulator-name = "lcd_bias_vsp";
+			/* vendor writes reg 0x00 = 0x0f -> 4.0 V + 15 * 100 mV */
+			regulator-min-microvolt = <5500000>;
+			regulator-max-microvolt = <5500000>;
+			regulator-always-on;
+			enable-gpios = <&pio 64 GPIO_ACTIVE_HIGH>;
+			/* driver requires the property even without a discharge GPIO */
+			ti,active-discharge-time-us = <0>;
+		};
+
+		outn {
+			regulator-name = "lcd_bias_vsn";
+			/* vendor writes reg 0x01 = 0x0f -> -5.5 V */
+			regulator-min-microvolt = <5500000>;
+			regulator-max-microvolt = <5500000>;
+			regulator-always-on;
+			enable-gpios = <&pio 63 GPIO_ACTIVE_HIGH>;
+			ti,active-discharge-time-us = <0>;
+		};
+	};
+
+	/*
+	 * GT9XXTB touch.  Vendor: i2c1 0x5d, EINT GPIO62, reset GPIO10.
+	 * UNPROVEN: exact GT9xxx chip ID string; the mainline goodix driver
+	 * reads it at runtime, so gt911 is only the match fallback and the
+	 * regulator rails are assumed (vendor uses VGP1 for vtouch).
+	 */
+	touchscreen@5d {
+		compatible = "goodix,gt9xx", "goodix,gt911";
+		reg = <0x5d>;
+		interrupt-parent = <&pio>;
+		interrupts = <62 IRQ_TYPE_EDGE_FALLING>;
+		irq-gpios = <&pio 62 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pio 10 GPIO_ACTIVE_HIGH>;
+		AVDD28-supply = <&mt6328_vgp1_reg>;
+		VDDIO-supply = <&mt6328_vio18_reg>;
+	};
+
 };
 
 &pio {
