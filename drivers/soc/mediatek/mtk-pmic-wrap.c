@@ -1673,6 +1673,7 @@ enum pwrap_type {
 	PWRAP_MT2701,
 	PWRAP_MT6765,
 	PWRAP_MT6779,
+	PWRAP_MT6755,
 	PWRAP_MT6795,
 	PWRAP_MT6797,
 	PWRAP_MT6873,
@@ -2114,6 +2115,18 @@ static int pwrap_common_init_reg_clock(struct pmic_wrapper *wrp)
 		pwrap_writel(wrp, 0x88, PWRAP_RDDMY);
 		pwrap_init_chip_select_ext(wrp, 15, 15, 15, 15);
 		break;
+	case PWRAP_MT6755:
+		/*
+		 * MT6755 pairs with the MT6351 slave and needs the vendor
+		 * "4T PMIC" clock setup: read-dummy of 8 cycles on both the
+		 * wrapper and the MT6351 DEW register, plus a CS-high write
+		 * extension of 0x33. Taken from the MT6755 BSP pwrap_hal.c
+		 * and verified on m681 under Linux 7.2-rc1 (pmOS).
+		 */
+		pwrap_write(wrp, wrp->slave->dew_regs[PWRAP_DEW_RDDMY_NO], 0x8);
+		pwrap_writel(wrp, 0x8, PWRAP_RDDMY);
+		pwrap_init_chip_select_ext(wrp, 0x33, 0, 0, 0);
+		break;
 	case PWRAP_MT8173:
 		pwrap_init_chip_select_ext(wrp, 0, 4, 2, 2);
 		break;
@@ -2209,6 +2222,7 @@ static int pwrap_init_cipher(struct pmic_wrapper *wrp)
 	case PWRAP_MT6735:
 	case PWRAP_MT6765:
 	case PWRAP_MT6779:
+	case PWRAP_MT6755:
 	case PWRAP_MT6795:
 	case PWRAP_MT6797:
 	case PWRAP_MT8173:
@@ -2717,6 +2731,26 @@ static const struct pmic_wrapper_type pwrap_mt6795 = {
 	.init_soc_specific = pwrap_mt6795_init_soc_specific,
 };
 
+static const struct pmic_wrapper_type pwrap_mt6755 = {
+	/*
+	 * MT6755 shares the MT6797 wrapper register layout (verified against
+	 * the MT6755 BSP pwrap_hal.h: WRAP_EN 0x4, HIPRIO_ARB_EN 0x54,
+	 * WACS2_CMD 0xa0, DCM_EN 0x1cc all match mt6797_regs). It differs
+	 * only in the reg-clock setup, handled by the PWRAP_MT6755 case in
+	 * pwrap_common_init_reg_clock().
+	 */
+	.regs = mt6797_regs,
+	.type = PWRAP_MT6755,
+	.arb_en_all = 0x01fff,
+	.int_en_all = 0xffffffc6,
+	.int1_en_all = 0,
+	.spi_w = PWRAP_MAN_CMD_SPI_WRITE,
+	.wdt_src = PWRAP_WDT_SRC_MASK_ALL,
+	.caps = PWRAP_CAP_RESET | PWRAP_CAP_DCM,
+	.init_reg_clock = pwrap_common_init_reg_clock,
+	.init_soc_specific = NULL,
+};
+
 static const struct pmic_wrapper_type pwrap_mt6797 = {
 	.regs = mt6797_regs,
 	.type = PWRAP_MT6797,
@@ -2853,6 +2887,7 @@ static const struct of_device_id of_pwrap_match_tbl[] = {
 	{ .compatible = "mediatek,mt6765-pwrap", .data = &pwrap_mt6765 },
 	{ .compatible = "mediatek,mt6779-pwrap", .data = &pwrap_mt6779 },
 	{ .compatible = "mediatek,mt6795-pwrap", .data = &pwrap_mt6795 },
+	{ .compatible = "mediatek,mt6755-pwrap", .data = &pwrap_mt6755 },
 	{ .compatible = "mediatek,mt6797-pwrap", .data = &pwrap_mt6797 },
 	{ .compatible = "mediatek,mt6873-pwrap", .data = &pwrap_mt6873 },
 	{ .compatible = "mediatek,mt7622-pwrap", .data = &pwrap_mt7622 },
