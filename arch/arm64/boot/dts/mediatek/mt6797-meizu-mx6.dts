@@ -54,7 +54,7 @@
 	 */
 	backlight: backlight {
 		compatible = "pwm-backlight";
-		pwms = <&disp_pwm0 0 35310 0>;
+		pwms = <&disp_pwm0 0 35310>;
 		/* Policy default, not a hardware value. */
 		default-brightness-level = <128>;
 	};
