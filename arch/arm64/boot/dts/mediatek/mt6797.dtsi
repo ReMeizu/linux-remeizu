@@ -8,6 +8,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/pinctrl/mt6797-pinfunc.h>
+#include <dt-bindings/phy/phy.h>
 #include <dt-bindings/power/mt6797-power.h>
 
 / {
@@ -469,6 +470,81 @@
 			 <&infrasys CLK_INFRA_MSDC0>;
 		clock-names = "source", "hclk", "source_cg";
 		status = "disabled";
+	};
+
+	/*
+	 * MT6797 SSUSB: MUSB device core plus xHCI host behind the IPPC glue.
+	 *
+	 * Addresses come from the vendor DTS reg-names combined with the vendor
+	 * HAL register map:
+	 *   vendor DTS usb0/usb3@11270000 reg-names
+	 *     ssusb_base 0x11270000, ssusb_sif 0x11280000, ssusb_sif2 0x11290000
+	 *   mu3d/hal/mu3d_hal_hw.h
+	 *     SSUSB_DEV_BASE         = u3_base     + 0x1000  (line 126)
+	 *     SSUSB_SIFSLV_IPPC_BASE = u3_sif_base + 0x700   (line 135)
+	 *   => mac 0x11271000, ippc 0x11280700.
+	 * Device interrupt is GIC_SPI 127 ("musb-hdrc" in the vendor DTS),
+	 * host (xHCI) interrupt is GIC_SPI 126 ("xhci").
+	 *
+	 * There is no MT6797 entry in the mtu3 or T-PHY match tables, so the
+	 * generic "mediatek,mtu3" and the mt8173/v1 T-PHY data are used; the
+	 * register layout is the same v1 SSUSB block as mt6755/mt8173.
+	 */
+	ssusb: usb@11271000 {
+		compatible = "mediatek,mtu3";
+		reg = <0 0x11271000 0 0x3000>,
+		      <0 0x11280700 0 0x100>;
+		reg-names = "mac", "ippc";
+		interrupts = <GIC_SPI 127 IRQ_TYPE_LEVEL_LOW>;
+		phys = <&u2port0 PHY_TYPE_USB2>,
+		       <&u3port0 PHY_TYPE_USB3>;
+		clocks = <&infrasys CLK_INFRA_ICUSB>,
+			 <&infrasys CLK_INFRA_SSUSB_REF>;
+		clock-names = "sys_ck", "ref_ck";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		status = "disabled";
+
+		usb_host: usb@11270000 {
+			compatible = "mediatek,mtk-xhci";
+			reg = <0 0x11270000 0 0x1000>;
+			reg-names = "mac";
+			interrupts = <GIC_SPI 126 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&infrasys CLK_INFRA_ICUSB>,
+				 <&infrasys CLK_INFRA_SSUSB_REF>;
+			clock-names = "sys_ck", "ref_ck";
+			status = "disabled";
+		};
+	};
+
+	/*
+	 * MT6797 SSUSB T-PHY, mt8173 (v1) register layout. All banks live in
+	 * the second SIF (0x11290000), mu3d/hal/mu3d_hal_hw.h:141-147:
+	 *   +0x000 SPLLC, +0x100 U2FREQ, +0x300 chip, +0x800 U2PHY_COM,
+	 *   +0x900 U3PHYD, +0xb00 U3PHYA (U3PHYA = PHYD + 0x200 in tphy v1).
+	 */
+	usb3phy: t-phy@11290000 {
+		compatible = "mediatek,mt8173-u3phy";
+		reg = <0 0x11290000 0 0x800>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		status = "disabled";
+
+		u2port0: usb-phy@11290800 {
+			reg = <0 0x11290800 0 0x100>;
+			clocks = <&topckgen CLK_TOP_SSUSB_PHY_48M_CK>;
+			clock-names = "ref";
+			#phy-cells = <1>;
+		};
+
+		u3port0: usb-phy@11290900 {
+			reg = <0 0x11290900 0 0x700>;
+			clocks = <&clk26m>;
+			clock-names = "ref";
+			#phy-cells = <1>;
+		};
 	};
 
 	afe: audio-controller@11220000 {

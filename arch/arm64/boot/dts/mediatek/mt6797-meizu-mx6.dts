@@ -17,6 +17,21 @@
 	};
 
 	/* LK must provide the actual DRAM and reserved-memory layout. */
+
+	/*
+	 * VBUS for the USB Type-C port. The stock board drives the port
+	 * through the SoC USB_DRVVBUS pin function (GPIO94 in the vendor DTS
+	 * pinctrl states "drvvbus_low"/"drvvbus_high"), not through a GPIO
+	 * owned by Linux, so the 5 V rail is modelled as a fixed supply that
+	 * the xHCI driver can request but not switch.
+	 */
+	vbus: regulator-usb-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-always-on;
+	};
 };
 
 &uart0 {
@@ -69,6 +84,14 @@
 				regulator-name = "vemc";
 				regulator-always-on;
 			};
+
+			/* Fixed 3.3 V USB transceiver rail (RG_VUSB33_EN only). */
+			mt6351_vusb33: ldo-vusb33 {
+				regulator-name = "vusb33";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-boot-on;
+			};
 		};
 	};
 };
@@ -84,9 +107,35 @@
 	pinctrl-1 = <&emmc_mx6_pins>;
 
 	/*
-	 * MMC/PMIC only for now: the 6.18 DRM driver has no MT6797 DSI
-	 * match and there is no MT6797 USB node yet, so display and USB
-	 * stay disabled until those ports exist.
+	 * eMMC/PMIC only for now. Display stays disabled: the 6.18 DRM
+	 * driver has neither an MT6797 DSI match nor support for the
+	 * MT6797 three-OVL cascade. USB is wired up separately below.
 	 */
+	status = "okay";
+};
+
+&usb3phy {
+	status = "okay";
+};
+
+/*
+ * The stock MX6 wires the port as OTG (ID on GPIO181 via the IDDIG pin
+ * function, VBUS drive on GPIO94 via USB_DRVVBUS), but mainline has no
+ * MT6797 ID/role driver and no FUSB340 Type-C mux driver, so all that can
+ * be described is the DRD controller itself. Note that mtu3 derives the
+ * runtime role from its Kconfig choice, not from dr_mode: with the default
+ * USB_MTU3_DUAL_ROLE both host and gadget are built and the driver forces
+ * HOST mode, which is why the xHCI child is enabled below.
+ */
+&ssusb {
+	vusb33-supply = <&mt6351_vusb33>;
+	vbus-supply = <&vbus>;
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&usb_host {
+	vusb33-supply = <&mt6351_vusb33>;
+	vbus-supply = <&vbus>;
 	status = "okay";
 };
