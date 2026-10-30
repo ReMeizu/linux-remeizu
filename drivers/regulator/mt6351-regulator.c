@@ -27,6 +27,13 @@ static const struct regulator_ops mt6351_ldo_ops = {
 	.is_enabled = regulator_is_enabled_regmap,
 };
 
+/* LDOs with a fixed output: only the enable bit is programmable. */
+static const struct regulator_ops mt6351_fixed_ops = {
+	.enable = regulator_enable_regmap,
+	.disable = regulator_disable_regmap,
+	.is_enabled = regulator_is_enabled_regmap,
+};
+
 #define MT6351_LDO(_id, _name, _en, _vsel, _mask) { \
 	.name = #_name, \
 	.of_match = "ldo-" #_name, \
@@ -50,6 +57,24 @@ static const struct regulator_desc mt6351_regulators[] = {
 		   MT6351_VMCH_ANA_CON0, BIT(8)),
 	MT6351_LDO(2, vmc, MT6351_LDO_VMC_CON0,
 		   MT6351_VMC_ANA_CON0, GENMASK(10, 8)),
+	/*
+	 * VUSB33 feeds the USB transceiver. The BSP register map exposes only
+	 * RG_VUSB33_EN (bit 1 of CON0) and no voltage selector, i.e. the rail
+	 * is a fixed 3.3 V; model it as such rather than as a variable LDO.
+	 */
+	{
+		.name = "vusb33",
+		.of_match = "ldo-vusb33",
+		.regulators_node = "regulators",
+		.id = 3,
+		.ops = &mt6351_fixed_ops,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+		.n_voltages = 1,
+		.min_uV = 3300000,
+		.enable_reg = MT6351_LDO_VUSB33_CON0,
+		.enable_mask = BIT(1),
+	},
 };
 
 static int mt6351_regulator_probe(struct platform_device *pdev)
