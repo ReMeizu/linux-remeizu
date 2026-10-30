@@ -51,7 +51,30 @@
 	};
 };
 
+&pwrap {
+	status = "okay";
+
+	pmic: mt6351 {
+		compatible = "mediatek,mt6351";
+		interrupt-parent = <&pio>;
+		interrupts = <262 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-controller;
+		#address-cells = <0>;
+		#interrupt-cells = <2>;
+
+		regulators {
+			compatible = "mediatek,mt6351-regulator";
+
+			mt6351_vemc: ldo-vemc {
+				regulator-name = "vemc";
+				regulator-always-on;
+			};
+		};
+	};
+};
+
 &mmc0 {
+	vmmc-supply = <&mt6351_vemc>;
 	bus-width = <8>;
 	non-removable;
 	no-sd;
@@ -60,6 +83,10 @@
 	pinctrl-0 = <&emmc_mx6_pins>;
 	pinctrl-1 = <&emmc_mx6_pins>;
 
-	/* VEMC/IO supplies and pad configuration require the MT6351 port. */
-	status = "disabled";
+	/*
+	 * MMC/PMIC only for now: the 6.18 DRM driver has no MT6797 DSI
+	 * match and there is no MT6797 USB node yet, so display and USB
+	 * stay disabled until those ports exist.
+	 */
+	status = "okay";
 };

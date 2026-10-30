@@ -444,6 +444,22 @@
 		status = "disabled";
 	};
 
+	/*
+	 * PMIC wrapper. MT6797 uses the same register layout as MT6755/MT6797
+	 * (pwrap_mt6797 in the driver); the wrapper is brought up by LK, so
+	 * Linux only needs the regmap for the MT6351 child.
+	 */
+	pwrap: pwrap@1000d000 {
+		compatible = "mediatek,mt6797-pwrap";
+		reg = <0 0x1000d000 0 0x1000>;
+		reg-names = "pwrap";
+		interrupts = <GIC_SPI 178 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&topckgen CLK_TOP_MUX_PMICSPI>,
+			 <&infrasys CLK_INFRA_PMIC_AP>;
+		clock-names = "spi", "wrap";
+		status = "disabled";
+	};
+
 	mmc0: mmc@11230000 {
 		compatible = "mediatek,mt6797-mmc";
 		reg = <0 0x11230000 0 0x10000>;
