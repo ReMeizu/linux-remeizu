@@ -123,4 +123,5 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt6750-meizu-m6.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6750-meizu-m6t.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6750-meizu-u10.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6737m-meizu-m5c.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt6753-meizu-m2note.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6753-meizu-m5s.dtb
