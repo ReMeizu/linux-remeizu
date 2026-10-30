@@ -18,6 +18,16 @@
 		stdout-path = "serial0:921600n8";
 	};
 
+	/*
+	 * LK rewrites this from EMI settings before boot; the stock U10 DTS
+	 * uses the same 1 GiB window. A live U10 reports ~1.8 GiB MemTotal,
+	 * so this is a bootloader placeholder, not a RAM-size claim.
+	 */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x3e800000>;
+	};
+
 	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
