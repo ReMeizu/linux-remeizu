@@ -624,6 +624,33 @@
 	};
 
 	/*
+	 * MT6797 display PWM (backlight).  The vendor pwm_disp@1100f000 node
+	 * only gives the address; the register layout is pinned by
+	 * video/mt6797/dispsys/ddp_reg.h:1309-1312 —
+	 *   DISP_PWM_EN_OFF 0x00, DISP_PWM_COMMIT_OFF 0x08,
+	 *   DISP_PWM_CON_0_OFF 0x10, DISP_PWM_CON_1_OFF 0x14 —
+	 * and by ddp_pwm.c, which writes the divider to CON_0 bits 16-25,
+	 * the source select to CON_0 bits 4-5, and period | duty << 16 to
+	 * CON_1.  That is exactly the mt8173 layout, so the mt8173 driver
+	 * data applies.
+	 *
+	 * The block sits on the infra bus at 0x1100f000 and is gated by a
+	 * single CLK_INFRA_DISP_PWM (parent pwm_sel); the driver wants a
+	 * "main" and a "mm" clock, so both names resolve to that one gate.
+	 * Neither the vendor DTS nor the driver pins the pwm_sel parent.
+	 */
+	disp_pwm0: pwm@1100f000 {
+		compatible = "mediatek,mt6797-disp-pwm",
+			     "mediatek,mt8173-disp-pwm";
+		reg = <0 0x1100f000 0 0x1000>;
+		#pwm-cells = <2>;
+		clocks = <&infrasys CLK_INFRA_DISP_PWM>,
+			 <&infrasys CLK_INFRA_DISP_PWM>;
+		clock-names = "main", "mm";
+		status = "disabled";
+	};
+
+	/*
 	 * MT6797 DDP blocks used by the primary display path.
 	 *
 	 * Addresses and interrupts are taken verbatim from the vendor dispsys

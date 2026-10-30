@@ -38,6 +38,27 @@
 	 * driver only calls set_gpio_lcd_vddi18()), so it is modelled as an
 	 * always-on 1.8 V rail.
 	 */
+	/*
+	 * Backlight. The stock MX6 tree describes it as
+	 *   led@6 { compatible = "mediatek,lcd-backlight"; led_mode = <4>;
+	 *           data = <1>; pwm_config = <0 0 0 0 0>; }
+	 * which is PWM-driven backlighting on DISP_PWM channel 0. The boost
+	 * converter is lcd_bl_bias@11 on i2c0 ("mediatek,lcd_bl_bias"); there
+	 * is no mainline driver for it and the stock tree has no enable GPIO,
+	 * so it is left as the bootloader programmed it.
+	 *
+	 * Period: the stock driver programs a 1024-cycle period
+	 * (ddp_pwm.c:132 writes CON_1 = 1023) from the clock selected by
+	 * pwm_config[0] = 0, which disp_pwm_get_clkid() maps to ULPOSC_D8
+	 * ("ULPOSC 29M"), i.e. 1024 / 29 MHz = 35310 ns.
+	 */
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&disp_pwm0 0 35310 0>;
+		/* Policy default, not a hardware value. */
+		default-brightness-level = <128>;
+	};
+
 	vddi18: regulator-vddi18 {
 		compatible = "regulator-fixed";
 		regulator-name = "vddi";
@@ -205,6 +226,7 @@
 		vddi-supply = <&vddi18>;
 		avdd-supply = <&disp_avdd>;
 		avee-supply = <&disp_avee>;
+		backlight = <&backlight>;
 		reset-gpios = <&pio 180 GPIO_ACTIVE_LOW>;
 
 		port {
@@ -213,4 +235,7 @@
 			};
 		};
 	};
+};
+&disp_pwm0 {
+	status = "okay";
 };
