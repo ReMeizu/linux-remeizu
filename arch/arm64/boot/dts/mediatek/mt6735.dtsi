@@ -11,6 +11,7 @@
 #include <dt-bindings/clock/mediatek,mt6735-topckgen.h>
 #include <dt-bindings/pinctrl/mediatek,mt6735-pinctrl.h>
 #include <dt-bindings/phy/phy.h>
+#include <dt-bindings/power/mediatek,mt6735-power-controller.h>
 #include <dt-bindings/reset/mediatek,mt6735-infracfg.h>
 #include <dt-bindings/reset/mediatek,mt6735-pericfg.h>
 
@@ -139,6 +140,42 @@
 			interrupts = <GIC_SPI 152 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&system_clk>, <&clk32k>;
 			clock-names = "system-clk", "rtc-clk";
+		};
+
+		/*
+		 * System Power Manager.  SPM_BASE = 0x10006000 and the DISP
+		 * power status/control bits are the ones the mainline
+		 * mt6735-pm-domains.h encodes: SPM_DIS_PWR_CON 0x23c,
+		 * SPM_PWR_STATUS 0x60c, PWR_STATUS_DISP BIT(3), SRAM PDN
+		 * GENMASK(11, 8) with ack BIT(12).  Vendor:
+		 * base/power/mt6735/mt_spm.h:100,176-177 and
+		 * mt_spm_mtcmos.c:1132,1145,1153,1413-1415.
+		 */
+		scpsys: syscon@10006000 {
+			compatible = "syscon", "simple-mfd";
+			reg = <0 0x10006000 0 0x1000>;
+
+			spm: power-controller {
+				compatible = "mediatek,mt6735-power-controller";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				#power-domain-cells = <1>;
+
+				power-domain@MT6735_POWER_DOMAIN_DIS {
+					reg = <MT6735_POWER_DOMAIN_DIS>;
+					#power-domain-cells = <0>;
+					/*
+					 * TOPAXI bus-protection regmap for the
+					 * DISP domain.  The legacy scpsys path
+					 * finds it with
+					 * of_find_node_with_property(spm, ...),
+					 * which starts after the spm node, so
+					 * the property must live on a domain
+					 * child (same layout as mt6795.dtsi).
+					 */
+					mediatek,infracfg = <&infracfg>;
+				};
+			};
 		};
 
 		sysirq: intpol-controller@10200620 {
@@ -475,13 +512,14 @@
 		 * mt6735m/ddp_reg.h ddp_reg_pa_base / ddp_irq_num); register
 		 * layouts are pinned per node by the compatible fallback.
 		 *
-		 * No power-domains yet: mainline mt6735.dtsi has no scpsys
-		 * node.  All nodes stay disabled until a board enables them.
+		 * All blocks live in the DISP power domain.  Nodes stay
+		 * disabled until a board enables them.
 		 */
 		mmsys: syscon@14000000 {
 			compatible = "mediatek,mt6735-mmsys", "syscon";
 			reg = <0 0x14000000 0 0x1000>;
 			#clock-cells = <1>;
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
 			status = "disabled";
 		};
 
@@ -489,6 +527,32 @@
 			compatible = "mediatek,mt6735-disp-mutex";
 			reg = <0 0x14015000 0 0x1000>;
 			interrupts = <GIC_SPI 186 IRQ_TYPE_LEVEL_LOW>;
+			status = "disabled";
+		};
+
+		/*
+		 * SMI larb0 (mmsys) and SMI common.  Addresses from the vendor
+		 * mt6735m.dts (smi_larb0@14016000, smi_common@14017000).
+		 * larb0 uses the mt8167-style per-larb MMU enable at 0xfc0.
+		 */
+		smi_larb0: larb@14016000 {
+			compatible = "mediatek,mt6735-smi-larb";
+			reg = <0 0x14016000 0 0x1000>;
+			mediatek,smi = <&smi_common>;
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
+			clocks = <&mmsys CLK_MM_DISP0_SMI_LARB0>,
+				 <&mmsys CLK_MM_DISP0_SMI_LARB0>;
+			clock-names = "apb", "smi";
+			status = "disabled";
+		};
+
+		smi_common: smi@14017000 {
+			compatible = "mediatek,mt6735-smi-common";
+			reg = <0 0x14017000 0 0x1000>;
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
+			clocks = <&mmsys CLK_MM_DISP0_SMI_COMMON>,
+				 <&mmsys CLK_MM_DISP0_SMI_COMMON>;
+			clock-names = "apb", "smi";
 			status = "disabled";
 		};
 
@@ -569,6 +633,7 @@
 			clock-names = "engine", "digital", "hs";
 			phys = <&mipi_tx0>;
 			phy-names = "dphy";
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";

@@ -10,9 +10,10 @@
  *   drivers/misc/mediatek/base/power/mt6735/mt_clk_id.h
  *     DISP0 bits 0,1,10..18; DISP1 bits 2 (DSI engine), 3 (DSI digital)
  *
- * SMI_COMMON and SMI_LARB0 are CLK_IS_CRITICAL because there is no mtk-smi
- * larb0 device yet: every DDP DMA engine (OVL/RDMA) moves data through
- * LARB0 -> SMI common, and closing those gates stalls the display path.
+ * SMI_COMMON and SMI_LARB0 are CLK_IS_CRITICAL.  The mainline mtk-smi
+ * larb0 device now exists, but it is only enabled through an IOMMU master
+ * and MT6735 has no mainline IOMMU yet; nothing else would keep these gates
+ * on for the DDP DMA engines (OVL/RDMA -> LARB0 -> SMI common).
  * This is the same bring-up arrangement as clk-mt6755-mm.c.
  */
 
