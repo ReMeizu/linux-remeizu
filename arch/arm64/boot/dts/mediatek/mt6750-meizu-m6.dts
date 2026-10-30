@@ -1,0 +1,194 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Meizu M6 (m1711), MediaTek MT6750
+ *
+ * Storage-only port: pwrap + MT6353 VEMC + eMMC, plus UART0.  Nothing
+ * else is described because nothing else is proven for this board.
+ *
+ * SoC identity.  The stock DTB inside the Flyme 7.1.2.0G boot image says
+ *     model = "MT6755"; compatible = "mediatek,MT6755";
+ * (captures/20260612-m6-stock-flyme-7120G-kernel/stock.dts:4-5).  That is
+ * the family name, not the SoC: MT6750 is the down-binned MT6755 and the
+ * vendor builds every MT6750 board on the mt6755 dtsi.  The running
+ * device resolves it -- on stock 3.18.35 (capture m6cap-20260725-1305,
+ * serial 711HEBRN23L3N) /proc/device-tree/model reads "MT6750V/DN" with
+ * the same "mediatek,MT6755" compatible, and getprop reports
+ *     ro.board.platform=mt6750, ro.mediatek.platform=MT6750,
+ *     ro.build.flavor=full_wt6750s_66_s11_n-user, project m1711-6.
+ * The stock preloader is preloader_wt6750s_66_s11_n.bin.  Hence MT6750.
+ */
+
+/dts-v1/;
+
+#include "mt6750.dtsi"
+#include <dt-bindings/pinctrl/mt65xx.h>
+
+/ {
+	model = "Meizu M6";
+	chassis-type = "handset";
+	compatible = "meizu,m6", "mediatek,mt6750";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	/*
+	 * Stock DTB value (stock-appended.dts:280-284).  LK rewrites the
+	 * memory node from the EMI settings on every boot, so this is the
+	 * reference window the vendor tree ships, not a claim about the SKU
+	 * size.  A live 2 GB M6 reports MemTotal 1825992 kB over
+	 * 0x40000000-0xbff7ffff (capture m6cap-20260725-1305/83-iomem,
+	 * 84-meminfo); this node is a conservative subset of that.
+	 */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x3e800000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		ram_console: ram-console@44400000 {
+			reg = <0 0x44400000 0 0x10000>;
+		};
+
+		pstore: pstore@44410000 {
+			reg = <0 0x44410000 0 0xe0000>;
+		};
+
+		minidump: minidump@444f0000 {
+			reg = <0 0x444f0000 0 0x10000>;
+		};
+
+		atf: atf@44600000 {
+			reg = <0 0x44600000 0 0x40000>;
+			no-map;
+		};
+
+		preloader: preloader@44800000 {
+			reg = <0 0x44800000 0 0x100000>;
+		};
+
+		lk: lk@46000000 {
+			reg = <0 0x46000000 0 0x400000>;
+		};
+
+		/*
+		 * Modem/connectivity reservations.  Sizes are the stock
+		 * DTS values (stock-appended.dts reserve-memory-ccci_md1,
+		 * reserve-memory-ccci_share, consys-reserve-memory,
+		 * spm-reserve-memory).  The modem is not driven by this
+		 * kernel, but its firmware may still be live when Linux
+		 * boots, so its RAM is kept out of the allocator.  Placement
+		 * is left to the early allocator and will not necessarily
+		 * match where LK put it.
+		 */
+		modem-md1 {
+			size = <0 0xa100000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		modem-share {
+			size = <0 0x600000>;
+			alignment = <0 0x4000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		consys {
+			size = <0 0x100000>;
+			alignment = <0 0x200000>;
+			alloc-ranges = <0 0x40000000 0 0x60000000>;
+			no-map;
+		};
+
+		spm {
+			size = <0 0x20000>;
+			alignment = <0 0x10000>;
+			alloc-ranges = <0 0x40000000 0 0x60000000>;
+			no-map;
+		};
+	};
+};
+
+/*
+ * UART0.  GPIO105 = URXD0, GPIO106 = UTXD0, both function 1
+ * (mt6755-pinfunc.h PINMUX_GPIO105__FUNC_URXD0 /
+ * PINMUX_GPIO106__FUNC_UTXD0).  The stock DTS uses exactly these pads
+ * (stock-appended.dts uart0_rx_set@gpio105 = 0x6901,
+ * uart0_tx_set@gpio106 = 0x6a01) and boots with console=ttyMT0.
+ */
+&pio {
+	uart0_pins: uart0-pins {
+		pins {
+			pinmux = <(MTK_PIN_NO(105) | 1)>,
+				 <(MTK_PIN_NO(106) | 1)>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
+	status = "okay";
+};
+
+/*
+ * MT6353 PMIC, storage rails only.
+ *
+ * The stock DTS describes this PMIC as
+ * compatible = "mediatek,mt6351-pmic", "mediatek,mt6353-pmic"
+ * (stock-appended.dts:1723-1724) and the stock 3.18 kernel only carries
+ * mt6353 PMIC drivers.  No interrupt is described: the MT6353 nIRQ EINT
+ * number is not proven and VEMC does not need one.
+ *
+ * VEMC range 2.9-3.3 V is the stock regulator node
+ * (stock-appended.dts ldo_vemc: 0x2c4020-0x325aa0, regulator-boot-on);
+ * it is kept always-on so the rail is never disabled without runtime
+ * proof.
+ */
+&pwrap {
+	status = "okay";
+
+	pmic: mt6353 {
+		compatible = "mediatek,mt6353";
+		#address-cells = <0>;
+
+		regulators {
+			mt6353_vemc: ldo-vemc {
+				regulator-name = "vemc";
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+		};
+	};
+};
+
+/*
+ * eMMC.  bus-width 8 / non-removable / vmmc-supply = VEMC are the stock
+ * MSDC0 settings (stock-appended.dts msdc0@11230000:
+ * vmmc-supply = <&ldo_vemc>, bus-width 8, non-removable).
+ *
+ * The stock node also enables mmc-hs200-1_8v/mmc-hs400-1_8v, but it has
+ * no vqmmc-supply and the vendor msdc driver switches that rail itself.
+ * Mainline needs a proven vqmmc-supply for 1.8 V modes, so HS200/HS400
+ * and pinctrl are deliberately not claimed here.
+ */
+&mmc0 {
+	vmmc-supply = <&mt6353_vemc>;
+	bus-width = <8>;
+	non-removable;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};
