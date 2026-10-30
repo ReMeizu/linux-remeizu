@@ -71,7 +71,7 @@ static const struct regulator_desc mt6351_regulators[] = {
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
 		.n_voltages = 1,
-		.min_uV = 3300000,
+		.fixed_uV = 3300000,
 		.enable_reg = MT6351_LDO_VUSB33_CON0,
 		.enable_mask = BIT(1),
 	},

@@ -88,8 +88,6 @@
 			/* Fixed 3.3 V USB transceiver rail (RG_VUSB33_EN only). */
 			mt6351_vusb33: ldo-vusb33 {
 				regulator-name = "vusb33";
-				regulator-min-microvolt = <3300000>;
-				regulator-max-microvolt = <3300000>;
 				regulator-boot-on;
 			};
 		};
