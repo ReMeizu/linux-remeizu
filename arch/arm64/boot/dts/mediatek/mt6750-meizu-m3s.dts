@@ -1,0 +1,183 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Meizu M3s (Y15), MediaTek MT6750
+ *
+ * Storage-only port: pwrap + MT6353 VEMC + eMMC, plus UART0.
+ *
+ * Sources: Flyme 6.3.0.0G intl for M3s, unpacked in
+ * /srv/forge/android/flyme_fw/m3s/unpacked (build.prop, stock-0.dts,
+ * kernel.bin).  Facts quoted per node below.
+ *
+ * SoC identity.  stock-0.dts says model = "MT6755" / compatible
+ * "mediatek,MT6755" (stock-0.dts:4-5), which is the MT6755 family name
+ * that every MT6750 vendor tree uses.  build.prop resolves it:
+ *     ro.board.platform=mt6750, ro.mediatek.platform=MT6755,
+ *     ro.product.model=M3s, ro.build.flavor=full_Y15-user,
+ *     ro.mediatek.version.release=ALPS.L1.MP10.V1.46.2_GR6750.66.L_P114
+ * and the kernel is built for mach/mt6755/Y15.  The ALPS branch and
+ * ro.board.platform both say MT6750, the commercial SoC string says the
+ * family.  MT6750 down-bin it is.
+ *
+ * Caveat: the bundled stock-0.dtb carries a chosen atag for an FHD
+ * nt35595 panel while the M3s kernel and LK only contain HD720 panels
+ * (STOCK_TRUTH.md section 3.1), so it may be a reference DTB shipped in
+ * the ROM.  The core layout used below (memory, ATF, pstore, pwrap,
+ * AP_UART0, msdc0) is the MT6755/MT6750 family layout and is consistent
+ * across the M6/M6T stock DTBs as well.
+ */
+
+/dts-v1/;
+
+#include "mt6750.dtsi"
+#include <dt-bindings/pinctrl/mt65xx.h>
+
+/ {
+	model = "Meizu M3s";
+	chassis-type = "handset";
+	compatible = "meizu,m3s", "mediatek,mt6750";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	/*
+	 * Stock DTB value (stock-0.dts:159-162).  LK rewrites the memory
+	 * node from the EMI settings on every boot; no live M3s unit has
+	 * been measured, so nothing beyond the vendor value is claimed.
+	 */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x3e800000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/*
+		 * Only two reservations are named by the stock DTB.  The
+		 * usual ram-console/minidump/preloader/lk regions are not
+		 * described there, so they are not invented here; 0x44400000
+		 * (immediately below pstore) is the conventional ram-console
+		 * slot but that is an inference, not evidence.
+		 */
+		pstore: pstore@44410000 {
+			reg = <0 0x44410000 0 0xe0000>;
+		};
+
+		atf: atf@44600000 {
+			reg = <0 0x44600000 0 0x40000>;
+			no-map;
+		};
+
+		/*
+		 * Modem/connectivity reservations, sizes from the stock DTS
+		 * (stock-0.dts reserve-memory-ccci_md1, ccci_share,
+		 * consys-reserve-memory, spm-reserve-memory).  The modem is
+		 * not driven by this kernel, but its firmware may still be
+		 * live when Linux boots.
+		 */
+		modem-md1 {
+			size = <0 0x8000000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		modem-share {
+			size = <0 0x600000>;
+			alignment = <0 0x4000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		consys {
+			size = <0 0x200000>;
+			alignment = <0 0x200000>;
+			no-map;
+		};
+
+		spm {
+			size = <0 0xe000>;
+			alignment = <0 0x10000>;
+			alloc-ranges = <0 0x40000000 0 0x80000000>;
+			no-map;
+		};
+	};
+};
+
+/*
+ * UART0: GPIO105 = URXD0, GPIO106 = UTXD0, function 1
+ * (mt6755-pinfunc.h).  The stock DTS has AP_UART0@11002000 (IRQ 91, the
+ * same controller/IRQ as the mt6750.dtsi uart0 node) and the kernel's
+ * built-in cmdline is console=ttyMT0.  UNKNOWN: LK passes
+ * console=ttyMT3, so the physical debug port on retail M3s is not
+ * proven; the pads above are the SoC-standard UART0 routing, not a
+ * board measurement.
+ */
+&pio {
+	uart0_pins: uart0-pins {
+		pins {
+			pinmux = <(MTK_PIN_NO(105) | 1)>,
+				 <(MTK_PIN_NO(106) | 1)>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
+	status = "okay";
+};
+
+/*
+ * MT6353 PMIC, storage rails only.  Stock compatible is
+ * "mediatek,mt6351-pmic", "mediatek,mt6353-pmic" (stock-0.dts:577-578)
+ * and the stock 3.10 kernel only ships pmic/mt6353 drivers.  No
+ * interrupt is described: the MT6353 nIRQ EINT number is not proven and
+ * VEMC does not need one.
+ *
+ * VEMC 2.9-3.3 V and boot-on are the stock ldo_vemc values
+ * (stock-0.dts:2537-2545: 0x2c4020-0x325aa0, regulator-boot-on); kept
+ * always-on so the rail is never disabled without runtime proof.
+ */
+&pwrap {
+	status = "okay";
+
+	pmic: mt6353 {
+		compatible = "mediatek,mt6353";
+		#address-cells = <0>;
+
+		regulators {
+			mt6353_vemc: ldo-vemc {
+				regulator-name = "vemc";
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+		};
+	};
+};
+
+/*
+ * eMMC.  The 3.10 stock DTS only declares msdc0@11230000 (IRQ 79, clock
+ * 0x1e) because bus width and the card supply live in the vendor msdc
+ * platform data; recovery.fstab confirms the internal storage is
+ * 11230000.msdc0.  bus-width 8 / non-removable / VEMC follow the MT6755
+ * reference MSDC0 setup (cust_mt6755_msdc.dtsi) that the M6 and M6T stock
+ * DTBs also use; they are not independently measured on M3s hardware.
+ */
+&mmc0 {
+	vmmc-supply = <&mt6353_vemc>;
+	bus-width = <8>;
+	non-removable;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};
