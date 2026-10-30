@@ -16,6 +16,7 @@
 #include <linux/mfd/mt6328/core.h>
 #include <linux/mfd/mt6331/core.h>
 #include <linux/mfd/mt6351/core.h>
+#include <linux/mfd/mt6353/registers.h>
 #include <linux/mfd/mt6357/core.h>
 #include <linux/mfd/mt6358/core.h>
 #include <linux/mfd/mt6359/core.h>
@@ -166,6 +167,16 @@ static const struct mfd_cell mt6351_devs[] = {
 	{ .name = "mt6351-regulator" },
 };
 
+/*
+ * MT6353 storage-only support. The cell name matches the platform driver in
+ * drivers/regulator/mt6353-regulator.c; no of_compatible is used, following
+ * the MT6351 cell convention above (the regulator driver inherits the PMIC
+ * node and looks up its "regulators" child).
+ */
+static const struct mfd_cell mt6353_devs[] = {
+	{ .name = "mt6353-regulator" },
+};
+
 static const struct mfd_cell mt6357_devs[] = {
 	{
 		.name = "mt6359-auxadc",
@@ -292,6 +303,11 @@ struct chip_data {
 	int cell_size;
 	int (*irq_init)(struct mt6397_chip *chip);
 	void (*irq_exit)(struct mt6397_chip *chip);
+	/*
+	 * PMIC nIRQ is optional (storage-only support). Only the MT6353 sets
+	 * this; every other chip keeps the historical mandatory-IRQ path.
+	 */
+	bool no_irq;
 };
 
 static const struct chip_data mt6323_core = {
@@ -317,6 +333,33 @@ static const struct chip_data mt6351_core = {
 	.cell_size = ARRAY_SIZE(mt6351_devs),
 	.irq_init = mt6351_irq_init,
 	.irq_exit = mt6351_irq_exit,
+};
+
+/*
+ * MT6353 (PMIC of the MT6750/MT6755 Meizu boards, e.g. U10).
+ *
+ * Storage-only: no interrupt controller is registered. The legacy MT6353
+ * interrupt layout is NOT compatible with any mt6397-family irq_init:
+ *  - the legacy bank registers are INT_CON0 = 0x02b8 and INT_STATUS0 =
+ *    0x02d6 (mt6353_hw.h:169,184), while MT6351 uses 0x02c2/0x02e0
+ *    (include/linux/mfd/mt6351/registers.h);
+ *  - bank 0 bit 8 is reserved and RTC sits at bit 9 (pmic_irq.c:109-126),
+ *    whereas MT6351 has RTC at bit 8 and MAD at bit 10;
+ *  - bank 1 is VCORE/VPROC/VS1/VPA/SPKL_D/SPKL_AB in the MT6353 BSP
+ *    (pmic_irq.c:128-145), not MT6351's VCORE/VGPU/VSRAM_MD/VMODEM.
+ * VEMC/VMCH/VMC need no PMIC interrupt, so the cell is registered without
+ * an IRQ domain. No EINT number for the MT6353 nIRQ line is proven, so the
+ * board DT must not describe one (UNKNOWN).
+ *
+ * HYPOTHESIS: SWCID uses the same [15:8] field position as MT6351 (register
+ * 0x0202, cid_shift 8); the BSP only logs the raw 16-bit value.
+ */
+static const struct chip_data mt6353_core = {
+	.cid_addr = MT6353_SWCID,
+	.cid_shift = 8,
+	.cells = mt6353_devs,
+	.cell_size = ARRAY_SIZE(mt6353_devs),
+	.no_irq = true,
 };
 
 static const struct chip_data mt6357_core = {
@@ -394,13 +437,26 @@ static int mt6397_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pmic);
 
-	pmic->irq = platform_get_irq(pdev, 0);
-	if (pmic->irq <= 0)
-		return pmic->irq;
+	if (pmic_core->no_irq) {
+		/*
+		 * Storage-only PMIC: the nIRQ line is optional. A board may
+		 * still wire it later; if it does, the IRQ is recorded but no
+		 * irq chip is registered (this chip_data has no irq_init).
+		 */
+		pmic->irq = platform_get_irq_optional(pdev, 0);
+		if (pmic->irq < 0)
+			pmic->irq = 0;
+	} else {
+		pmic->irq = platform_get_irq(pdev, 0);
+		if (pmic->irq <= 0)
+			return pmic->irq;
+	}
 
-	ret = pmic_core->irq_init(pmic);
-	if (ret)
-		return ret;
+	if (pmic_core->irq_init) {
+		ret = pmic_core->irq_init(pmic);
+		if (ret)
+			return ret;
+	}
 
 	ret = devm_mfd_add_devices(&pdev->dev, PLATFORM_DEVID_NONE,
 				   pmic_core->cells, pmic_core->cell_size,
@@ -408,7 +464,7 @@ static int mt6397_probe(struct platform_device *pdev)
 	if (ret) {
 		if (pmic_core->irq_exit)
 			pmic_core->irq_exit(pmic);
-		else
+		else if (pmic->irq_domain)
 			irq_domain_remove(pmic->irq_domain);
 		dev_err(&pdev->dev, "failed to add child devices: %d\n", ret);
 	}
@@ -429,6 +485,9 @@ static const struct of_device_id mt6397_of_match[] = {
 	}, {
 		.compatible = "mediatek,mt6351",
 		.data = &mt6351_core,
+	}, {
+		.compatible = "mediatek,mt6353",
+		.data = &mt6353_core,
 	}, {
 		.compatible = "mediatek,mt6357",
 		.data = &mt6357_core,

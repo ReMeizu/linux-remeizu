@@ -11,6 +11,7 @@
 
 	aliases {
 		serial0 = &uart0;
+		mmc0 = &mmc0;
 	};
 
 	chosen {
@@ -61,5 +62,50 @@
 &uart0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart0_pins>;
+	status = "okay";
+};
+
+/*
+ * MT6353 PMIC, storage rails only.
+ *
+ * No interrupt is described: the MT6353 nIRQ EINT number is not proven
+ * (see the mt6353_core comment in drivers/mfd/mt6397-core.c), and VEMC/
+ * VMCH/VMC do not need one. VEMC voltage range follows the stock MT6353 DTS
+ * (u10-kernel-318 mt6353.dtsi:211-217: 2.9-3.3 V, regulator-boot-on there;
+ * always-on here so the rail is never disabled without runtime proof).
+ */
+&pwrap {
+	status = "okay";
+
+	pmic: mt6353 {
+		compatible = "mediatek,mt6353";
+		#address-cells = <0>;
+
+		regulators {
+			mt6353_vemc: ldo-vemc {
+				regulator-name = "vemc";
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+		};
+	};
+};
+
+/*
+ * eMMC. bus-width/non-removable/no-sd/no-sdio are from the stock MT6750
+ * MSDC DTS (cust_mt6755_msdc.dtsi:27-45, vmmc-supply = vemc).
+ *
+ * UNKNOWN: no pinctrl is attached. The MSDC0 pads are known (GPIO178-189,
+ * function 1 in pinctrl-mtk-mt6755.h) but the board drive strength and
+ * whether LK leaves the pads muxed is unverified, so no pinctrl claim is
+ * made here. HS200/HS400 are not enabled: no vqmmc-supply is proven.
+ */
+&mmc0 {
+	vmmc-supply = <&mt6353_vemc>;
+	bus-width = <8>;
+	non-removable;
+	no-sd;
+	no-sdio;
 	status = "okay";
 };
