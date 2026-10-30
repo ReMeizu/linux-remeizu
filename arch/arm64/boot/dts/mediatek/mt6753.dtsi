@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * MediaTek MT6753
+ *
+ * MT6753 is the eight-core member of the MT6735 SoC family.  The vendor
+ * 3.18 kernel uses a single "mt6735" platform for MT6735, MT6735M and
+ * MT6753: arch/arm64/boot/dts/mt6753.dtsi in the downstream tree selects
+ * mediatek,MT6735 as the root compatible and instantiates the clock,
+ * pinctrl and pwrap controllers with the mt6735 compatibles.
+ *
+ * The only SoC-level difference described by the vendor DTS is the CPU
+ * topology: four Cortex-A53 cores in cluster 0 (MPIDR 0x0..0x3) and four
+ * in cluster 1 (MPIDR 0x100..0x103).
+ */
+
+#include "mt6735.dtsi"
+
+/ {
+	compatible = "mediatek,mt6753";
+
+	cpus {
+		cpu4: cpu@100 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x100>;
+			enable-method = "psci";
+		};
+
+		cpu5: cpu@101 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x101>;
+			enable-method = "psci";
+		};
+
+		cpu6: cpu@102 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x102>;
+			enable-method = "psci";
+		};
+
+		cpu7: cpu@103 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x103>;
+			enable-method = "psci";
+		};
+	};
+};
