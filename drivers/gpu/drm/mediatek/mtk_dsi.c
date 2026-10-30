@@ -1476,6 +1476,27 @@ static const struct mtk_dsi_driver_data mt2701_dsi_driver_data = {
 	.reg_shadow_dbg_off = 0x190
 };
 
+/*
+ * MT6797: the DSI controller register block is offset-identical to mt8173.
+ * Vendor video/mt6797/dispsys/ddp_reg.h (DSI_REGS, lines 904-977, with the
+ * STATIC_ASSERTs at 1039-1051) puts START/COM_CTRL/MODE/TXRX/PSCTRL at
+ * 0x00/0x10/0x14/0x18/0x1c, HSA/HBP/HFP/BLLP_WC at 0x50-0x5c, CMDQ_SIZE at
+ * 0x60, PHY_LCCON/LD0CON/SYNCON at 0x104-0x10c, PHY_TIMECON0-3 at
+ * 0x110-0x11c and VM_CMD_CON at 0x130, and ddp_dsi.c:3001 maps the command
+ * queue at DSI0_BASE + 0x200.  There is no SIZE_CON: 0x38 is LFR_CON and
+ * 0x34 LFR_STA on this generation, so has_size_ctl stays false.
+ *
+ * The vendor driver programs the blanking word counts with the stock
+ * arithmetic (ddp_dsi.c:4545-4565: *bpp, -10/-12, ALIGN4, no phy-cycle
+ * shaving), which is what stock_vdo_wc reproduces.
+ */
+static const struct mtk_dsi_driver_data mt6797_dsi_driver_data = {
+	.reg_cmdq_off = 0x200,
+	.reg_vm_cmd_off = 0x130,
+	.reg_shadow_dbg_off = 0x190,
+	.stock_vdo_wc = true,
+};
+
 static const struct mtk_dsi_driver_data mt8183_dsi_driver_data = {
 	.reg_cmdq_off = 0x200,
 	.reg_vm_cmd_off = 0x130,
@@ -1506,6 +1527,7 @@ static const struct of_device_id mtk_dsi_of_match[] = {
 	{ .compatible = "mediatek,mt2701-dsi", .data = &mt2701_dsi_driver_data },
 	{ .compatible = "mediatek,mt8167-dsi", .data = &mt2701_dsi_driver_data },
 	{ .compatible = "mediatek,mt6755-dsi", .data = &mt6755_dsi_driver_data },
+	{ .compatible = "mediatek,mt6797-dsi", .data = &mt6797_dsi_driver_data },
 	{ .compatible = "mediatek,mt8173-dsi", .data = &mt8173_dsi_driver_data },
 	{ .compatible = "mediatek,mt8183-dsi", .data = &mt8183_dsi_driver_data },
 	{ .compatible = "mediatek,mt8186-dsi", .data = &mt8186_dsi_driver_data },

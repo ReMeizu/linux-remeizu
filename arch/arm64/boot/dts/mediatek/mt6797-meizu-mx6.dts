@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /dts-v1/;
+#include <dt-bindings/gpio/gpio.h>
+
 #include "mt6797.dtsi"
 
 / {
@@ -25,6 +27,48 @@
 	 * owned by Linux, so the 5 V rail is modelled as a fixed supply that
 	 * the xHCI driver can request but not switch.
 	 */
+	/*
+	 * Panel rails. GPIO numbers, polarity and the 5.8 V TPS65132 output
+	 * come from the stock MX6 device tree (analysis/m95-kernel.dts):
+	 *   lcm_rst_out0/1_gpio  pin 0xb4 (180)
+	 *   lcd_bias_enp0/1_gpio pin 0xfc (252), low = off, high = on
+	 *   lcd_bias_enn0/1_gpio pin 0xfb (251), low = off, high = on
+	 *   lcd_enp/lcd_enn      0x588040 uV = 5.8 V, boot-on
+	 * VDDI18 has no GPIO or PMIC control in the stock tree (the vendor
+	 * driver only calls set_gpio_lcd_vddi18()), so it is modelled as an
+	 * always-on 1.8 V rail.
+	 */
+	vddi18: regulator-vddi18 {
+		compatible = "regulator-fixed";
+		regulator-name = "vddi";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	disp_avdd: regulator-disp-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "avdd";
+		regulator-min-microvolt = <5800000>;
+		regulator-max-microvolt = <5800000>;
+		gpio = <&pio 252 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <180>;
+		regulator-boot-on;
+	};
+
+	disp_avee: regulator-disp-avee {
+		compatible = "regulator-fixed";
+		regulator-name = "avee";
+		regulator-min-microvolt = <5800000>;
+		regulator-max-microvolt = <5800000>;
+		gpio = <&pio 251 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <180>;
+		regulator-boot-on;
+	};
+
 	vbus: regulator-usb-vbus {
 		compatible = "regulator-fixed";
 		regulator-name = "vbus";
@@ -105,9 +149,7 @@
 	pinctrl-1 = <&emmc_mx6_pins>;
 
 	/*
-	 * eMMC/PMIC only for now. Display stays disabled: the 6.18 DRM
-	 * driver has neither an MT6797 DSI match nor support for the
-	 * MT6797 three-OVL cascade. USB is wired up separately below.
+	 * eMMC. Display (DSI0 + FT8716) and USB are wired up below.
 	 */
 	status = "okay";
 };
@@ -136,4 +178,39 @@
 	vusb33-supply = <&mt6351_vusb33>;
 	vbus-supply = <&vbus>;
 	status = "okay";
+};
+
+&mipi_tx0 {
+	status = "okay";
+};
+
+/*
+ * FT8716 FHD panel on DSI0. The panel parameters (1080x1920, 4 lanes,
+ * burst video mode, 430 MHz DSI PLL) are documented in
+ * drivers/gpu/drm/panel/panel-fitipower-ft8716.c.
+ */
+&dsi0 {
+	status = "okay";
+
+	port {
+		dsi0_out: endpoint {
+			remote-endpoint = <&panel_in>;
+		};
+	};
+
+	panel@0 {
+		compatible = "fitipower,ft8716";
+		reg = <0>;
+
+		vddi-supply = <&vddi18>;
+		avdd-supply = <&disp_avdd>;
+		avee-supply = <&disp_avee>;
+		reset-gpios = <&pio 180 GPIO_ACTIVE_LOW>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
 };

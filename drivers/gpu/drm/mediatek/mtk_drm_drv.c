@@ -347,9 +347,47 @@ static const struct mtk_mmsys_driver_data mt6755_mmsys_driver_data = {
 	.mmsys_dev_num = 1,
 };
 
+/*
+ * MT6797 primary display path, from the vendor DDP scenario table
+ * (meizu_mx6_m95 dispsys/ddp_path.c lines 70-77, DDP_SCENARIO_PRIMARY_DISP):
+ * OVL0 -> OVL0_2L -> OVL1_2L -> OVL0_VIRTUAL -> COLOR0 -> CCORR -> AAL ->
+ * GAMMA -> OD -> DITHER -> RDMA0 -> PATH0 -> UFOE -> (PWM0) -> DSI0.
+ * OVL0_VIRTUAL and PATH0 are mux outputs, not blocks, so they have no
+ * component here; PWM0 is a backlight helper module and not part of the
+ * pixel path (vendor module_can_connect[PWM0] = 0).
+ *
+ * The two OVL stages stay separate components: mtk_crtc distributes planes by
+ * each component's layer_nr (4 + 2), which is the vendor ovl_layer_num()
+ * split minus OVL1_2L. The stock driver wires OVL1_2L in as a third stage,
+ * but mtk_crtc only feeds two overlay components per CRTC
+ * (mtk_crtc_num_comp_planes() returns 0 for comp_idx > 1), and the same muxes
+ * express the two-stage chain - see mt6797-mmsys.h.
+ */
+static const unsigned int mt6797_mtk_ddp_main[] = {
+	DDP_COMPONENT_OVL0,
+	DDP_COMPONENT_OVL_2L0,
+	DDP_COMPONENT_COLOR0,
+	DDP_COMPONENT_CCORR,
+	DDP_COMPONENT_AAL0,
+	DDP_COMPONENT_GAMMA,
+	DDP_COMPONENT_OD0,
+	DDP_COMPONENT_DITHER0,
+	DDP_COMPONENT_RDMA0,
+	DDP_COMPONENT_UFOE,
+	DDP_COMPONENT_DSI0,
+};
+
+static const struct mtk_mmsys_driver_data mt6797_mmsys_driver_data = {
+	.main_path = mt6797_mtk_ddp_main,
+	.main_len = ARRAY_SIZE(mt6797_mtk_ddp_main),
+	.mmsys_dev_num = 1,
+};
+
 static const struct of_device_id mtk_drm_of_ids[] = {
 	{ .compatible = "mediatek,mt6755-mmsys",
 	  .data = &mt6755_mmsys_driver_data},
+	{ .compatible = "mediatek,mt6797-mmsys",
+	  .data = &mt6797_mmsys_driver_data},
 	{ .compatible = "mediatek,mt2701-mmsys",
 	  .data = &mt2701_mmsys_driver_data},
 	{ .compatible = "mediatek,mt7623-mmsys",
@@ -751,6 +789,18 @@ static const struct of_device_id mtk_ddp_comp_dt_ids[] = {
 	  .data = (void *)MTK_DISP_COLOR },
 	{ .compatible = "mediatek,mt8173-disp-color",
 	  .data = (void *)MTK_DISP_COLOR },
+	{ .compatible = "mediatek,mt6797-disp-dither",
+	  .data = (void *)MTK_DISP_DITHER },
+	{ .compatible = "mediatek,mt6797-disp-mutex",
+	  .data = (void *)MTK_DISP_MUTEX },
+	{ .compatible = "mediatek,mt6797-disp-od",
+	  .data = (void *)MTK_DISP_OD },
+	{ .compatible = "mediatek,mt6797-disp-ovl",
+	  .data = (void *)MTK_DISP_OVL },
+	{ .compatible = "mediatek,mt6797-disp-ovl-2l",
+	  .data = (void *)MTK_DISP_OVL },
+	{ .compatible = "mediatek,mt6797-disp-ufoe",
+	  .data = (void *)MTK_DISP_UFOE },
 	{ .compatible = "mediatek,mt8167-disp-dither",
 	  .data = (void *)MTK_DISP_DITHER },
 	{ .compatible = "mediatek,mt8183-disp-dither",
