@@ -922,6 +922,15 @@ config REGULATOR_MT6351
 	  Support the VEMC, VMCH and VMC LDOs of the MT6351 PMIC.
 	  E2 and E3 revisions are supported; E1 voltage maps are not.
 
+config REGULATOR_MT6353
+	tristate "MediaTek MT6353 storage regulators"
+	depends on MFD_MT6397
+	help
+	  Support the VEMC, VMCH and VMC LDOs of the MT6353 PMIC.
+	  Register and voltage data come from the MediaTek 3.18 BSP.
+	  Only the storage rails are implemented; the PMIC interrupt
+	  controller is not required for them.
+
 config REGULATOR_MT6357
 	tristate "MediaTek MT6357 PMIC"
 	depends on MFD_MT6397

@@ -110,6 +110,7 @@ obj-$(CONFIG_REGULATOR_MT6328) += mt6328-regulator.o
 obj-$(CONFIG_REGULATOR_MT6331)	+= mt6331-regulator.o
 obj-$(CONFIG_REGULATOR_MT6332)	+= mt6332-regulator.o
 obj-$(CONFIG_REGULATOR_MT6351) += mt6351-regulator.o
+obj-$(CONFIG_REGULATOR_MT6353) += mt6353-regulator.o
 obj-$(CONFIG_REGULATOR_MT6357)	+= mt6357-regulator.o
 obj-$(CONFIG_REGULATOR_MT6358)	+= mt6358-regulator.o
 obj-$(CONFIG_REGULATOR_MT6359)	+= mt6359-regulator.o
