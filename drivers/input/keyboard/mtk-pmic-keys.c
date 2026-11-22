@@ -12,6 +12,7 @@
 #include <linux/mfd/mt6323/registers.h>
 #include <linux/mfd/mt6328/registers.h>
 #include <linux/mfd/mt6331/registers.h>
+#include <linux/mfd/mt6351/registers.h>
 #include <linux/mfd/mt6357/registers.h>
 #include <linux/mfd/mt6358/registers.h>
 #include <linux/mfd/mt6359/registers.h>
@@ -94,6 +95,23 @@ static const struct mtk_pmic_regs mt6328_regs = {
 		MTK_PMIC_KEYS_REGS(MT6328_TOPSTATUS,
 		0x4, MT6328_INT_MISC_CON, 0x2, MTK_PMIC_MT6328_HOMEKEY_RST),
 	.pmic_rst_reg = MT6328_TOP_RST_MISC,
+	.rst_lprst_mask = MTK_PMIC_MT6328_RST_DU_MASK,
+	.key_release_irq = true,
+};
+
+/*
+ * MT6351 (MT6755/MT6797 phones): the key bits sit at the MT6328 positions,
+ * only INT_MISC_CON and TOP_RST_MISC moved (vendor upmu_hw.h, MT6351_PMIC_
+ * PWRKEY_DEB/HOMEKEY_DEB, RG_*KEY_INT_SEL, RG_*KEY_RST_EN, RG_PWRKEY_RST_TD).
+ */
+static const struct mtk_pmic_regs mt6351_regs = {
+	.keys_regs[MTK_PMIC_PWRKEY_INDEX] =
+		MTK_PMIC_KEYS_REGS(MT6351_TOPSTATUS,
+		0x2, MT6351_INT_MISC_CON, 0x4, MTK_PMIC_MT6328_PWRKEY_RST),
+	.keys_regs[MTK_PMIC_HOMEKEY_INDEX] =
+		MTK_PMIC_KEYS_REGS(MT6351_TOPSTATUS,
+		0x4, MT6351_INT_MISC_CON, 0x2, MTK_PMIC_MT6328_HOMEKEY_RST),
+	.pmic_rst_reg = MT6351_TOP_RST_MISC,
 	.rst_lprst_mask = MTK_PMIC_MT6328_RST_DU_MASK,
 	.key_release_irq = true,
 };
@@ -325,6 +343,9 @@ static const struct of_device_id of_mtk_pmic_keys_match_tbl[] = {
 	}, {
 		.compatible = "mediatek,mt6328-keys",
 		.data = &mt6328_regs,
+	}, {
+		.compatible = "mediatek,mt6351-keys",
+		.data = &mt6351_regs,
 	}, {
 		.compatible = "mediatek,mt6331-keys",
 		.data = &mt6331_regs,

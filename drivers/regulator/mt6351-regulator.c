@@ -16,6 +16,10 @@ static const unsigned int mt6351_vmc_voltages[] = {
 	1200000, 1300000, 1500000, 1800000,
 	2000000, 2900000, 3000000, 3300000,
 };
+static const unsigned int mt6351_vibr_voltages[] = {
+	1200000, 1300000, 1500000, 1800000,
+	2000000, 2800000, 3000000, 3300000,
+};
 
 static const struct regulator_ops mt6351_ldo_ops = {
 	.list_voltage = regulator_list_voltage_table,
@@ -50,6 +54,20 @@ static const struct regulator_ops mt6351_fixed_ops = {
 	.vsel_mask = _mask, \
 }
 
+#define MT6351_FIXED(_id, _name, _en, _uv) { \
+	.name = #_name, \
+	.of_match = "ldo-" #_name, \
+	.regulators_node = "regulators", \
+	.id = _id, \
+	.ops = &mt6351_fixed_ops, \
+	.type = REGULATOR_VOLTAGE, \
+	.owner = THIS_MODULE, \
+	.n_voltages = 1, \
+	.fixed_uV = _uv, \
+	.enable_reg = _en, \
+	.enable_mask = BIT(1), \
+}
+
 static const struct regulator_desc mt6351_regulators[] = {
 	MT6351_LDO(0, vemc, MT6351_LDO_VEMC_CON0,
 		   MT6351_VEMC_ANA_CON0, BIT(8)),
@@ -57,6 +75,16 @@ static const struct regulator_desc mt6351_regulators[] = {
 		   MT6351_VMCH_ANA_CON0, BIT(8)),
 	MT6351_LDO(2, vmc, MT6351_LDO_VMC_CON0,
 		   MT6351_VMC_ANA_CON0, GENMASK(10, 8)),
+	MT6351_LDO(4, vibr, MT6351_LDO_VIBR_CON0,
+		   MT6351_VIBR_ANA_CON0, GENMASK(10, 8)),
+	/*
+	 * Fixed rails the MT6755 boards hang consumers on (touch AVDD28 and
+	 * VDDIO).  The BSP lists them as enable-only: PMIC_RG_VIO18_EN,
+	 * PMIC_RG_VIO28_EN and PMIC_RG_VLDO28_EN_0, each bit 1.
+	 */
+	MT6351_FIXED(5, vio18, MT6351_LDO_VIO18_CON0, 1800000),
+	MT6351_FIXED(6, vio28, MT6351_LDO_VIO28_CON0, 2800000),
+	MT6351_FIXED(7, vldo28, MT6351_LDO_VLDO28_CON3, 2800000),
 	/*
 	 * VUSB33 feeds the USB transceiver. The BSP register map exposes only
 	 * RG_VUSB33_EN (bit 1 of CON0) and no voltage selector, i.e. the rail

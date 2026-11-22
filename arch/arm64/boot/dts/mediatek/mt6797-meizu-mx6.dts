@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /dts-v1/;
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 
 #include "mt6797.dtsi"
 
@@ -141,6 +142,20 @@
 		interrupt-controller;
 		#address-cells = <0>;
 		#interrupt-cells = <2>;
+
+		/* PMIC power key (PWRKEY, MT6351 interrupts 0 and 2). */
+		keys {
+			compatible = "mediatek,mt6351-keys";
+
+			key-power {
+				linux,keycodes = <KEY_POWER>;
+				wakeup-source;
+			};
+		};
+
+		rtc {
+			compatible = "mediatek,mt6351-rtc";
+		};
 
 		regulators {
 			compatible = "mediatek,mt6351-regulator";
