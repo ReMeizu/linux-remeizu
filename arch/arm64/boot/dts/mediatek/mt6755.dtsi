@@ -10,6 +10,7 @@
 #include <dt-bindings/clock/mediatek,mt6755-clk.h>
 #include <dt-bindings/phy/phy.h>
 #include <dt-bindings/power/mediatek,mt6755-power.h>
+#include <dt-bindings/reset/mt6755-resets.h>
 
 / {
 	compatible = "mediatek,mt6755";
@@ -202,9 +203,9 @@
 		 * AP-side PMIC-wrapper access gate. devm_clk_bulk_get_all_enabled()
 		 * enables both regardless of name.
 		 *
-		 * The pwrap_mt6755 master drops PWRAP_CAP_RESET (mt6755 has no
-		 * mainline reset controller); the wrapper reset is only used by
-		 * pwrap_init(), which is skipped because lk brings the PMIC up
+		 * The driver will not probe without the "pwrap" reset (infracfg
+		 * INFRA_GLOBALCON_RST0 bit 0). It is only pulsed by pwrap_init(),
+		 * which is skipped because lk brings the PMIC up
 		 * (PWRAP_INIT_DONE2 set) before Linux.
 		 *
 		 * mt6351 IRQ: the PMIC's nIRQ is wired to the SoC EINT block
@@ -219,6 +220,8 @@
 			clocks = <&topckgen CLK_TOP_MUX_PMICSPI>,
 				 <&infrasys CLK_INFRA_PMIC_AP>;
 			clock-names = "spi", "wrap";
+			resets = <&infrasys MT6755_INFRA_PMIC_WRAP_RST>;
+			reset-names = "pwrap";
 
 			pmic: mt6351 {
 				compatible = "mediatek,mt6351";

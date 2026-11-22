@@ -10,6 +10,7 @@
 #include <dt-bindings/pinctrl/mt6797-pinfunc.h>
 #include <dt-bindings/phy/phy.h>
 #include <dt-bindings/power/mt6797-power.h>
+#include <dt-bindings/reset/mt6797-resets.h>
 
 / {
 	compatible = "mediatek,mt6797";
@@ -458,6 +459,8 @@
 		clocks = <&topckgen CLK_TOP_MUX_PMICSPI>,
 			 <&infrasys CLK_INFRA_PMIC_AP>;
 		clock-names = "spi", "wrap";
+		resets = <&infrasys MT6797_INFRA_PMIC_WRAP_RST>;
+		reset-names = "pwrap";
 		status = "disabled";
 	};
 

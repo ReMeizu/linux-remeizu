@@ -7,6 +7,7 @@
 #include <dt-bindings/clock/mediatek,mt6755-clk.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/reset/mt6755-resets.h>
 
 / {
 	compatible = "mediatek,mt6750";
@@ -119,6 +120,7 @@
 		compatible = "mediatek,mt6755-infrasys", "syscon";
 		reg = <0 0x10001000 0 0x1000>;
 		#clock-cells = <1>;
+		#reset-cells = <1>;
 	};
 
 	apmixedsys: clock-controller@1000c000 {
@@ -217,6 +219,8 @@
 		clocks = <&topckgen CLK_TOP_MUX_PMICSPI>,
 			 <&infrasys CLK_INFRA_PMIC_AP>;
 		clock-names = "spi", "wrap";
+		resets = <&infrasys MT6755_INFRA_PMIC_WRAP_RST>;
+		reset-names = "pwrap";
 	};
 
 	mmc0: mmc@11230000 {
