@@ -92,6 +92,7 @@ SYM_CODE_START(primary_entry)
 	 * safe with the MMU off (x19 == 0), which is how the stock lk
 	 * enters the kernel. See also m681_spm_mark() in setup.c.
 	 */
+#ifdef CONFIG_MEIZU_M681_BOOT_MARKERS
 	cbnz	x19, .Lm681_no_marker
 	movz	x8, #0x6608
 	movk	x8, #0x1000, lsl #16
@@ -102,6 +103,7 @@ SYM_CODE_START(primary_entry)
 	movk	w9, #0x4652, lsl #16
 	str	w9, [x8, #8]
 .Lm681_no_marker:
+#endif
 
 	adrp	x1, early_init_stack
 	mov	sp, x1

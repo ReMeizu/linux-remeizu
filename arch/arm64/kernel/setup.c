@@ -286,8 +286,11 @@ u64 cpu_logical_map(unsigned int cpu)
  */
 static void __init m681_spm_mark(u32 stage)
 {
-	void __iomem *p = early_ioremap(0x10006608, 0x10);
+	void __iomem *p;
 
+	if (!IS_ENABLED(CONFIG_MEIZU_M681_BOOT_MARKERS))
+		return;
+	p = early_ioremap(0x10006608, 0x10);
 	if (!p)
 		return;
 	writel(0xf6810000 | stage, p);
@@ -337,8 +340,11 @@ static void __init m681_wdt_disarm(void)
 
 static void m681_spm_mark_late(u32 stage)
 {
-	void __iomem *p = ioremap(0x10006608, 0x10);
+	void __iomem *p;
 
+	if (!IS_ENABLED(CONFIG_MEIZU_M681_BOOT_MARKERS))
+		return;
+	p = ioremap(0x10006608, 0x10);
 	if (!p)
 		return;
 	writel(0xf6810000 | stage, p);
@@ -371,11 +377,20 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	early_fixmap_init();
 	early_ioremap_init();
 
-	m681_wdt_disarm();
-	m681_cpuxgpt_enable();
 	m681_spm_mark(2);
 
 	setup_machine_fdt(__fdt_pointer);
+
+	/*
+	 * MT6755-only fixups: this Image also boots the other MediaTek boards,
+	 * msm8953 and QEMU, where these addresses and the SiP call mean
+	 * something else (an SMC without EL3 firmware is an undefined
+	 * instruction).
+	 */
+	if (of_flat_dt_is_compatible(of_get_flat_dt_root(), "mediatek,mt6755")) {
+		m681_wdt_disarm();
+		m681_cpuxgpt_enable();
+	}
 
 	/*
 	 * Initialise the static keys early as they may be enabled by the

@@ -16,6 +16,17 @@ config DEBUG_EFI
 	  the kernel that are only useful when using a debug build of the
 	  UEFI firmware
 
+config MEIZU_M681_BOOT_MARKERS
+	bool "Meizu m681 boot-stage markers in SPM_SW_RSV"
+	depends on ARCH_MEDIATEK
+	help
+	  Write the boot stage reached (kernel entry, setup_arch, initcalls)
+	  into the MT6755 SPM_SW_RSV registers at 0x10006608, which survive a
+	  watchdog reset and can be read back from recovery.
+
+	  The writes are unconditional, so a kernel built with this option
+	  must only be booted on MT6755. Say N for a multi-board Image.
+
 config ARM64_RELOC_TEST
 	depends on m
 	tristate "Relocation testing module"
