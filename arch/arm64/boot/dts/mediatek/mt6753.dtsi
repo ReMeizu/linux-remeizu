@@ -51,19 +51,6 @@
 			cpu-release-addr = <0x0 0x40000200>;
 		};
 	};
-
-	/*
-	 * System Power Manager (SPM): CPU MTCMOS control for the "mt-boot"
-	 * SMP method.  Same block and layout as the downstream "SLEEP" node
-	 * (arch/arm64/boot/dts/mt6753.dtsi:318-325: compatible
-	 * "mediatek,SLEEP", reg <0x10006000 0x1000>, no clocks; the SPM bus
-	 * clock is enabled by the bootloader and there is no clock gate for
-	 * it in the vendor DT).
-	 */
-	spm: spm@10006000 {
-		compatible = "mediatek,mt6753-spm";
-		reg = <0 0x10006000 0 0x1000>;
-	};
 };
 
 /*
@@ -77,6 +64,19 @@
  * (arch/arm64/boot/dts/mt6753.dtsi:58-135); BL31 gets the real entrypoint
  * through the PSCI CPU_ON SMC call.
  */
+/*
+ * System Power Manager (SPM): CPU MTCMOS control for the "mt-boot" SMP
+ * method.  Same block as the downstream "SLEEP" node
+ * (arch/arm64/boot/dts/mt6753.dtsi:318-325: compatible "mediatek,SLEEP",
+ * reg <0x10006000 0x1000>, no clocks).  mt6735.dtsi already describes this
+ * block as the scpsys syscon for the DISP power domain, so the SMP code
+ * finds it through an extra compatible instead of a second node on the
+ * same registers.
+ */
+&scpsys {
+	compatible = "mediatek,mt6753-spm", "syscon", "simple-mfd";
+};
+
 &cpu0 {
 	enable-method = "mt-boot";
 	cpu-release-addr = <0x0 0x40000200>;
