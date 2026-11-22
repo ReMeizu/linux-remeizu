@@ -238,6 +238,21 @@ static const u32 mt6351_regs[] = {
 	[PWRAP_DEW_RDDMY_NO] =		0x030C,
 };
 
+static const u32 mt6353_regs[] = {
+	[PWRAP_DEW_DIO_EN] =		0x0340,
+	[PWRAP_DEW_READ_TEST] =		0x0342,
+	[PWRAP_DEW_WRITE_TEST] =	0x0344,
+	[PWRAP_DEW_CRC_EN] =		0x0348,
+	[PWRAP_DEW_CRC_VAL] =		0x034a,
+	[PWRAP_DEW_CIPHER_KEY_SEL] =	0x034e,
+	[PWRAP_DEW_CIPHER_IV_SEL] =	0x0350,
+	[PWRAP_DEW_CIPHER_EN] =		0x0352,
+	[PWRAP_DEW_CIPHER_RDY] =	0x0354,
+	[PWRAP_DEW_CIPHER_MODE] =	0x0356,
+	[PWRAP_DEW_CIPHER_SWRST] =	0x0358,
+	[PWRAP_DEW_RDDMY_NO] =		0x035a,
+};
+
 static const u32 mt6357_regs[] = {
 	[PWRAP_DEW_DIO_EN] =            0x040A,
 	[PWRAP_DEW_READ_TEST] =         0x040C,
@@ -1661,6 +1676,7 @@ enum pmic_type {
 	PMIC_MT6331,
 	PMIC_MT6332,
 	PMIC_MT6351,
+	PMIC_MT6353,
 	PMIC_MT6357,
 	PMIC_MT6358,
 	PMIC_MT6359,
@@ -2117,11 +2133,12 @@ static int pwrap_common_init_reg_clock(struct pmic_wrapper *wrp)
 		break;
 	case PWRAP_MT6755:
 		/*
-		 * MT6755 pairs with the MT6351 slave and needs the vendor
-		 * "4T PMIC" clock setup: read-dummy of 8 cycles on both the
-		 * wrapper and the MT6351 DEW register, plus a CS-high write
-		 * extension of 0x33. Taken from the MT6755 BSP pwrap_hal.c
-		 * and verified on m681 under Linux 7.2-rc1 (pmOS).
+		 * MT6755 pairs with the MT6351 (or, on MT6750, the MT6353)
+		 * slave and needs the vendor "4T PMIC" clock setup: read-dummy
+		 * of 8 cycles on both the wrapper and the PMIC DEW register,
+		 * plus a CS-high write extension of 0x33. Taken from the
+		 * MT6755 BSP pwrap_hal.c and verified with the MT6351 on m681
+		 * under Linux 7.2-rc1 (pmOS).
 		 */
 		pwrap_write(wrp, wrp->slave->dew_regs[PWRAP_DEW_RDDMY_NO], 0x8);
 		pwrap_writel(wrp, 0x8, PWRAP_RDDMY);
@@ -2257,6 +2274,7 @@ static int pwrap_init_cipher(struct pmic_wrapper *wrp)
 	case PMIC_MT6323:
 	case PMIC_MT6328:
 	case PMIC_MT6351:
+	case PMIC_MT6353:
 	case PMIC_MT6357:
 		pwrap_write(wrp, wrp->slave->dew_regs[PWRAP_DEW_CIPHER_EN],
 			    0x1);
@@ -2602,6 +2620,13 @@ static const struct pwrap_slv_type pmic_mt6351 = {
 	.caps = 0,
 };
 
+static const struct pwrap_slv_type pmic_mt6353 = {
+	.dew_regs = mt6353_regs,
+	.type = PMIC_MT6353,
+	.regops = &pwrap_regops16,
+	.caps = 0,
+};
+
 static const struct pwrap_slv_type pmic_mt6357 = {
 	.dew_regs = mt6357_regs,
 	.type = PMIC_MT6357,
@@ -2643,6 +2668,7 @@ static const struct of_device_id of_slave_match_tbl[] = {
 	{ .compatible = "mediatek,mt6328", .data = &pmic_mt6328 },
 	{ .compatible = "mediatek,mt6331", .data = &pmic_mt6331 },
 	{ .compatible = "mediatek,mt6351", .data = &pmic_mt6351 },
+	{ .compatible = "mediatek,mt6353", .data = &pmic_mt6353 },
 	{ .compatible = "mediatek,mt6357", .data = &pmic_mt6357 },
 	{ .compatible = "mediatek,mt6358", .data = &pmic_mt6358 },
 	{ .compatible = "mediatek,mt6359", .data = &pmic_mt6359 },
