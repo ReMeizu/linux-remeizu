@@ -138,7 +138,8 @@
 	pmic: mt6351 {
 		compatible = "mediatek,mt6351";
 		interrupt-parent = <&pio>;
-		interrupts = <262 IRQ_TYPE_LEVEL_HIGH>;
+		/* PMIC_EINT: virtual pin 262, which is EINT 176. */
+		interrupts = <176 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-controller;
 		#address-cells = <0>;
 		#interrupt-cells = <2>;
