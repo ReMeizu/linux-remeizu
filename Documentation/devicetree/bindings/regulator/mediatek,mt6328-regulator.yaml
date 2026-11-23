@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/mediatek,mt6328-regulator.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6328 regulators
+
+maintainers:
+  - Yassine Oudjana <y.oudjana@protonmail.com>
+
+description:
+  Buck converters and low-dropout supplies of the MT6328 PMIC. The regulator
+  controller is a child of the MT6328 multifunction device.
+
+properties:
+  compatible:
+    const: mediatek,mt6328-regulator
+
+patternProperties:
+  '^(buck_v(pa|proc|core1|sys22|lte)|ldo_v(aux18|tcxo_[01]|aud28|cn28|cama|cn33_bt|cn33_wifi|usb33|efuse|sim[12]|emc_3v3|mch|tref|mc|camaf|ibr|io28|gp1|camd|rf18_[01]|io18|cn18|camio|sram|m))$':
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+
+required:
+  - compatible
+
+additionalProperties: false

@@ -1,0 +1,57 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+
+#ifndef __SOC_MEDIATEK_MT6735_MMSYS_H
+#define __SOC_MEDIATEK_MT6735_MMSYS_H
+
+/*
+ * MT6735/MT6737M (m5c) MMSYS routing.
+ *
+ * Offsets and selector values come from the vendor 4.9 tree
+ * (drivers/misc/mediatek/video/mt6735/dispsys/mt6735m/ddp_reg.h):
+ *   OVL0_MOUT_EN    0x030
+ *   DITHER_MOUT_EN  0x038
+ *   COLOR0_SEL_IN   0x058
+ *   DSI0_SEL_IN     0x064
+ *   RDMA0_SOUT_SEL  0x06c
+ * and the DDP path tables in ddp_path.c (OVL0 -> COLOR0 = 1 << 0,
+ * DITHER -> RDMA0 = 1 << 0, COLOR0 <- OVL0 = list index 1,
+ * DSI0 <- RDMA0 = list index 1, RDMA0 -> DSI0 = list index 2).
+ *
+ * The register block is offset-identical to MT8167, so the values match
+ * mt8167-mmsys.h.  MT6735 has a single OVL and no UFOE, hence no UFOE routes.
+ */
+
+#define MT6735_DISP_REG_CONFIG_DISP_OVL0_MOUT_EN	0x030
+#define MT6735_DISP_REG_CONFIG_DISP_DITHER_MOUT_EN	0x038
+#define MT6735_DISP_REG_CONFIG_DISP_COLOR0_SEL_IN	0x058
+#define MT6735_DISP_REG_CONFIG_DISP_DSI0_SEL_IN		0x064
+#define MT6735_DISP_REG_CONFIG_DISP_RDMA0_SOUT_SEL_IN	0x06c
+
+#define MT6735_DITHER_MOUT_EN_RDMA0			0x1
+#define MT6735_DITHER_MOUT_EN_MASK			0x7
+
+#define MT6735_RDMA0_SOUT_DSI0				0x2
+#define MT6735_RDMA0_SOUT_MASK				0x3
+
+#define MT6735_DSI0_SEL_IN_RDMA0			0x1
+#define MT6735_DSI0_SEL_IN_MASK				0x3
+
+static const struct mtk_mmsys_routes mt6735_mmsys_routing_table[] = {
+	MMSYS_ROUTE(OVL0, COLOR0,
+		    MT6735_DISP_REG_CONFIG_DISP_OVL0_MOUT_EN, OVL0_MOUT_EN_COLOR0,
+		    OVL0_MOUT_EN_COLOR0),
+	MMSYS_ROUTE(DITHER0, RDMA0,
+		    MT6735_DISP_REG_CONFIG_DISP_DITHER_MOUT_EN, MT6735_DITHER_MOUT_EN_MASK,
+		    MT6735_DITHER_MOUT_EN_RDMA0),
+	MMSYS_ROUTE(OVL0, COLOR0,
+		    MT6735_DISP_REG_CONFIG_DISP_COLOR0_SEL_IN, COLOR0_SEL_IN_OVL0,
+		    COLOR0_SEL_IN_OVL0),
+	MMSYS_ROUTE(RDMA0, DSI0,
+		    MT6735_DISP_REG_CONFIG_DISP_DSI0_SEL_IN, MT6735_DSI0_SEL_IN_MASK,
+		    MT6735_DSI0_SEL_IN_RDMA0),
+	MMSYS_ROUTE(RDMA0, DSI0,
+		    MT6735_DISP_REG_CONFIG_DISP_RDMA0_SOUT_SEL_IN, MT6735_RDMA0_SOUT_MASK,
+		    MT6735_RDMA0_SOUT_DSI0),
+};
+
+#endif /* __SOC_MEDIATEK_MT6735_MMSYS_H */

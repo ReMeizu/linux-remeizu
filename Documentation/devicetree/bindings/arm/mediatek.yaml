@@ -51,7 +51,17 @@ properties:
           - const: mediatek,mt6592
       - items:
           - enum:
+              - meizu,m5c
+          - const: mediatek,mt6737m
+      - items:
+          - enum:
+              - meizu,u10
+          - const: mediatek,mt6750
+      - items:
+          - enum:
               - mediatek,mt6755-evb
+              - meizu,m681
+              - meizu,l681
           - const: mediatek,mt6755
       - items:
           - enum:
@@ -70,6 +80,7 @@ properties:
           - enum:
               - archermind,mt6797-x20-dev
               - mediatek,mt6797-evb
+              - meizu,mx6
           - const: mediatek,mt6797
       - items:
           - enum:

@@ -1,0 +1,121 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+
+#include "mt6750.dtsi"
+#include <dt-bindings/pinctrl/mt65xx.h>
+
+/ {
+	model = "Meizu U10";
+	chassis-type = "handset";
+	compatible = "meizu,u10", "mediatek,mt6750";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	/*
+	 * LK rewrites this from EMI settings before boot; the stock U10 DTS
+	 * uses the same 1 GiB window. A live U10 reports ~1.8 GiB MemTotal,
+	 * so this is a bootloader placeholder, not a RAM-size claim.
+	 */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x3e800000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		ram_console: ram-console@44400000 {
+			reg = <0 0x44400000 0 0x10000>;
+		};
+
+		pstore: pstore@44410000 {
+			reg = <0 0x44410000 0 0xe0000>;
+		};
+
+		minidump: minidump@444f0000 {
+			reg = <0 0x444f0000 0 0x10000>;
+		};
+
+		atf: atf@44600000 {
+			reg = <0 0x44600000 0 0x40000>;
+			no-map;
+		};
+
+		preloader: preloader@44800000 {
+			reg = <0 0x44800000 0 0x100000>;
+		};
+
+		lk: lk@46000000 {
+			reg = <0 0x46000000 0 0x400000>;
+		};
+	};
+};
+
+&pio {
+	uart0_pins: uart0-pins {
+		pins {
+			pinmux = <(MTK_PIN_NO(105) | 1)>,
+				 <(MTK_PIN_NO(106) | 1)>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
+	status = "okay";
+};
+
+/*
+ * MT6353 PMIC, storage rails only.
+ *
+ * No interrupt is described: the MT6353 nIRQ EINT number is not proven
+ * (see the mt6353_core comment in drivers/mfd/mt6397-core.c), and VEMC/
+ * VMCH/VMC do not need one. VEMC voltage range follows the stock MT6353 DTS
+ * (u10-kernel-318 mt6353.dtsi:211-217: 2.9-3.3 V, regulator-boot-on there;
+ * always-on here so the rail is never disabled without runtime proof).
+ */
+&pwrap {
+	status = "okay";
+
+	pmic: mt6353 {
+		compatible = "mediatek,mt6353";
+		#address-cells = <0>;
+
+		regulators {
+			mt6353_vemc: ldo-vemc {
+				regulator-name = "vemc";
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+		};
+	};
+};
+
+/*
+ * eMMC. bus-width/non-removable/no-sd/no-sdio are from the stock MT6750
+ * MSDC DTS (cust_mt6755_msdc.dtsi:27-45, vmmc-supply = vemc).
+ *
+ * UNKNOWN: no pinctrl is attached. The MSDC0 pads are known (GPIO178-189,
+ * function 1 in pinctrl-mtk-mt6755.h) but the board drive strength and
+ * whether LK leaves the pads muxed is unverified, so no pinctrl claim is
+ * made here. HS200/HS400 are not enabled: no vqmmc-supply is proven.
+ */
+&mmc0 {
+	vmmc-supply = <&mt6353_vemc>;
+	bus-width = <8>;
+	non-removable;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};

@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/mediatek,mt6755-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6750 and MT6755 Pin Controllers
+
+maintainers:
+  - Sean Wang <sean.wang@kernel.org>
+
+description: |
+  The GPIO block and six IOCFG blocks control 190 pins. The external interrupt
+  controller has 160 lines and 16 hardware debounce counters. GPIOs 160 through
+  189 do not have a linear external interrupt mapping.
+
+properties:
+  compatible:
+    enum:
+      - mediatek,mt6750-pinctrl
+      - mediatek,mt6755-pinctrl
+
+  reg:
+    minItems: 8
+    maxItems: 8
+
+  reg-names:
+    items:
+      - const: gpio
+      - const: iocfg0
+      - const: iocfg1
+      - const: iocfg2
+      - const: iocfg3
+      - const: iocfg4
+      - const: iocfg5
+      - const: eint
+
+  gpio-controller: true
+  gpio-ranges:
+    maxItems: 1
+
+  '#gpio-cells':
+    const: 2
+
+  interrupt-controller: true
+  interrupts:
+    maxItems: 1
+
+  '#interrupt-cells':
+    const: 2
+
+  '#address-cells':
+    const: 0
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - gpio-controller
+  - gpio-ranges
+  - '#gpio-cells'
+  - interrupt-controller
+  - interrupts
+  - '#interrupt-cells'
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+patternProperties:
+  '-pins$':
+    type: object
+    additionalProperties: false
+
+    patternProperties:
+      '^pins':
+        type: object
+        $ref: /schemas/pinctrl/pincfg-node.yaml#
+        additionalProperties: false
+        properties:
+          pinmux:
+            $ref: /schemas/types.yaml#/definitions/uint32-array
+            description: Pin number in bits 15:8 and mux function in bits 3:0.
+          bias-disable: true
+          bias-pull-up: true
+          bias-pull-down: true
+          input-enable: true
+          input-disable: true
+          input-schmitt-enable: true
+          input-schmitt-disable: true
+          output-high: true
+          output-low: true
+        required:
+          - pinmux
+
+additionalProperties: false

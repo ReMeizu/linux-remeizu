@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Meizu M2 Note (m571), MediaTek MT6753
+ *
+ * Board data is taken from three vendor sources:
+ *
+ *  - the stock device tree compiled into the m2note boot image (readback
+ *    of mmcblk0p9 / boot-p9.img, DTB appended to Image.gz-dtb), which
+ *    provides the reserved-memory layout, the PMIC EINT (pmic@206),
+ *    UART0 at 921600 baud and MSDC0 as "mediatek,mt6753-mmc";
+ *  - the Meizu 3.18 port tree (arch/arm64/boot/dts/m2note.dts), which
+ *    confirms MT6328, the eMMC 8-bit/non-removable setup and the SD card
+ *    detect pin;
+ *  - the stock 65c DCT (cust_gpio.dtsi), which gives the pin mux:
+ *    UART0 on GPIO74/75 and MSDC0 on GPIO172..183.
+ *
+ * The memory node is the value the vendor compiled into the stock DTB:
+ * LK rewrites it from the EMI settings before entering Linux, so the
+ * shipped blob only carries a 0x3f000000 placeholder.  A mainline
+ * bootloader has to pass the real size; this file does not invent one.
+ */
+
+/dts-v1/;
+
+#include "mt6753.dtsi"
+#include "mt6328.dtsi"
+
+/ {
+	model = "Meizu M2 Note";
+	compatible = "meizu,m2note", "mediatek,mt6753";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x3f000000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		atf@43000000 {
+			reg = <0 0x43000000 0 0x30000>;
+			no-map;
+		};
+
+		ram-console@43f00000 {
+			reg = <0 0x43f00000 0 0x10000>;
+			no-map;
+		};
+
+		pstore@43f10000 {
+			reg = <0 0x43f10000 0 0xe0000>;
+			no-map;
+		};
+
+		minirdump@43ff0000 {
+			reg = <0 0x43ff0000 0 0x10000>;
+			no-map;
+		};
+
+		/* Vendor reservation sizes from the stock DTB.  The modem is
+		 * not driven by this kernel yet, but its firmware may still be
+		 * live when Linux boots, so keep its RAM out of the allocator.
+		 */
+		modem-md1 {
+			size = <0 0x3810000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		modem-md3 {
+			size = <0 0xb00000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		consys {
+			size = <0 0x100000>;
+			alignment = <0 0x200000>;
+			no-map;
+		};
+	};
+};
+
+&pio {
+	uart0_default: uart0-default-pins {
+		pins-rx-tx {
+			pinmux = <PINMUX_GPIO74__FUNC_URXD0>,
+				 <PINMUX_GPIO75__FUNC_UTXD0>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_default>;
+	status = "okay";
+};
+
+&pwrap {
+	status = "okay";
+};
+
+/*
+ * No keys node: the vendor DTB drives the power/volume buttons through the
+ * SoC keypad at 0x10003000 ("mediatek,mt6735-keypad"), not through the
+ * MT6328 PMIC keys, and 6.18 has no MT6735 keypad driver yet.
+ */
+
+&mmc0 {
+	/* Vendor MSDC driver (mt6735/sd.c:1192) powers eMMC from the
+	 * MT6328 vemc_3v3 and vio18 rails.
+	 */
+	vmmc-supply = <&mt6328_vemc33_reg>;
+	vqmmc-supply = <&mt6328_vio18_reg>;
+	bus-width = <8>;
+	max-frequency = <26000000>;
+	non-removable;
+	disable-wp;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};

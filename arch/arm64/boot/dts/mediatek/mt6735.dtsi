@@ -1,0 +1,701 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2021, Yassine Oudjana <y.oudjana@protonmail.com>
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/mediatek,mt6735-clk.h>
+#include <dt-bindings/clock/mediatek,mt6735-infracfg.h>
+#include <dt-bindings/clock/mediatek,mt6735-pericfg.h>
+#include <dt-bindings/clock/mediatek,mt6735-topckgen.h>
+#include <dt-bindings/pinctrl/mediatek,mt6735-pinctrl.h>
+#include <dt-bindings/phy/phy.h>
+#include <dt-bindings/power/mediatek,mt6735-power-controller.h>
+#include <dt-bindings/reset/mediatek,mt6735-infracfg.h>
+#include <dt-bindings/reset/mediatek,mt6735-pericfg.h>
+
+/ {
+	compatible = "mediatek,mt6735";
+	interrupt-parent = <&sysirq>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+	psci {
+		compatible = "arm,psci";
+		method = "smc";
+		cpu_suspend = <0x84000001>;
+		cpu_off = <0x84000002>;
+		cpu_on = <0x84000003>;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x0>;
+			enable-method = "psci";
+
+		};
+
+		cpu1: cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x1>;
+			enable-method = "psci";
+
+		};
+
+		cpu2: cpu@2 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x2>;
+			enable-method = "psci";
+
+		};
+
+		cpu3: cpu@3 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x3>;
+			enable-method = "psci";
+
+		};
+	};
+
+	clocks {
+		clk26m: clk26m {
+			compatible = "fixed-clock";
+			clock-frequency = <26000000>;
+			#clock-cells = <0>;
+		};
+
+		clk32k: clk32k {
+			compatible = "fixed-clock";
+			clock-frequency = <32768>;
+			#clock-cells = <0>;
+		};
+
+		system_clk: sysclk {
+			compatible = "fixed-clock";
+			clock-frequency = <13000000>;
+			#clock-cells = <0>;
+		};
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_PPI 13
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+		clock-frequency = <13000000>;
+	};
+
+	soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "simple-bus";
+		ranges;
+
+		infracfg: clock-controller@10000000 {
+			compatible = "mediatek,mt6735-infracfg", "syscon";
+			reg = <0 0x10000000 0 0x1000>;
+			#clock-cells = <1>;
+			#reset-cells = <1>;
+		};
+
+		pwrap: pwrap@10001000 {
+			compatible = "mediatek,mt6735-pwrap";
+			reg = <0 0x10001000 0 0x250>;
+			reg-names = "pwrap";
+			interrupts = <GIC_SPI 163 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&infracfg CLK_INFRA_PMIC_SPI>,
+				 <&infracfg CLK_INFRA_PMIC_WRAP>;
+			clock-names = "spi", "wrap";
+			resets = <&infracfg MT6735_INFRA_RST0_PMIC_WRAP>;
+			reset-names = "pwrap";
+
+			status = "disabled";
+		};
+
+		pericfg: clock-controller@10002000 {
+			compatible = "mediatek,mt6735-pericfg", "syscon";
+			reg = <0 0x10002000 0 0x1000>;
+			#clock-cells = <1>;
+			#reset-cells = <1>;
+		};
+
+		gpt: timer@10004000 {
+			compatible = "mediatek,mt6735-timer",
+				     "mediatek,mt6577-timer";
+			reg = <0 0x10004000 0 0x80>;
+			interrupts = <GIC_SPI 152 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&system_clk>, <&clk32k>;
+			clock-names = "system-clk", "rtc-clk";
+		};
+
+		/*
+		 * System Power Manager.  SPM_BASE = 0x10006000 and the DISP
+		 * power status/control bits are the ones the mainline
+		 * mt6735-pm-domains.h encodes: SPM_DIS_PWR_CON 0x23c,
+		 * SPM_PWR_STATUS 0x60c, PWR_STATUS_DISP BIT(3), SRAM PDN
+		 * GENMASK(11, 8) with ack BIT(12).  Vendor:
+		 * base/power/mt6735/mt_spm.h:100,176-177 and
+		 * mt_spm_mtcmos.c:1132,1145,1153,1413-1415.
+		 */
+		scpsys: syscon@10006000 {
+			compatible = "syscon", "simple-mfd";
+			reg = <0 0x10006000 0 0x1000>;
+
+			spm: power-controller {
+				compatible = "mediatek,mt6735-power-controller";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				#power-domain-cells = <1>;
+
+				power-domain@MT6735_POWER_DOMAIN_DIS {
+					reg = <MT6735_POWER_DOMAIN_DIS>;
+					#power-domain-cells = <0>;
+					/*
+					 * TOPAXI bus-protection regmap for the
+					 * DISP domain.  The legacy scpsys path
+					 * finds it with
+					 * of_find_node_with_property(spm, ...),
+					 * which starts after the spm node, so
+					 * the property must live on a domain
+					 * child (same layout as mt6795.dtsi).
+					 */
+					mediatek,infracfg = <&infracfg>;
+				};
+			};
+		};
+
+		sysirq: intpol-controller@10200620 {
+			compatible = "mediatek,mt6735-sysirq",
+				"mediatek,mt6577-sysirq";
+			reg = <0 0x10200620 0 0x20>;
+			#address-cells = <0>;
+			interrupt-controller;
+			#interrupt-cells = <3>;
+			interrupt-parent = <&gic>;
+		};
+
+		cpuxgpt: timer@10200670 {
+			compatible = "mediatek,mt6735-systimer",
+				     "mediatek,mt6795-systimer";
+			reg = <0 0x10200670 0 0x8>;
+			clocks = <&system_clk>;
+		};
+
+		apmixedsys: clock-controller@10209000 {
+			compatible = "mediatek,mt6735-apmixedsys", "syscon";
+			reg = <0 0x10209000 0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		topckgen: clock-controller@10210000 {
+			compatible = "mediatek,mt6735-topckgen", "syscon";
+			reg = <0 0x10210000 0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		pio: pin-controller@10211000 {
+			compatible = "mediatek,mt6735-pinctrl";
+			reg = <0 0x10211000 0 0x800>,
+			      <0 0x10211800 0 0x100>,
+			      <0 0x10211900 0 0x100>,
+			      <0 0x10211a00 0 0x100>,
+			      <0 0x10211b00 0 0x100>,
+			      <0 0x10211c00 0 0x100>,
+			      <0 0x10211d00 0 0x100>,
+			      <0 0x10005000 0 0x1000>;
+			reg-names = "gpio",
+				    "iocfg0",
+				    "iocfg1",
+				    "iocfg2",
+				    "iocfg3",
+				    "iocfg4",
+				    "iocfg5",
+				    "eint";
+			interrupts = <GIC_SPI 153 IRQ_TYPE_LEVEL_HIGH>;
+
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pio 0 0 204>;
+
+			#address-cells = <0>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+
+			i2c0_default: i2c0-default-pins {
+				pins-sda-scl {
+					pinmux = <PINMUX_GPIO47__FUNC_SDA0>,
+						 <PINMUX_GPIO48__FUNC_SCL0>;
+				};
+			};
+
+			i2c1_default: i2c1-default-pins {
+				pins-sda-scl {
+					pinmux = <PINMUX_GPIO49__FUNC_SDA1>,
+						 <PINMUX_GPIO50__FUNC_SCL1>;
+				};
+			};
+
+			i2c2_default: i2c2-default-pins {
+				pins-sda-scl {
+					pinmux = <PINMUX_GPIO51__FUNC_SDA2>,
+						 <PINMUX_GPIO52__FUNC_SCL2>;
+				};
+			};
+
+			i2c3_default: i2c3-default-pins {
+				pins-sda-scl {
+					pinmux = <PINMUX_GPIO53__FUNC_SDA3>,
+						 <PINMUX_GPIO54__FUNC_SCL3>;
+				};
+			};
+
+			mmc0_pins_default: mmc0-default-pins {
+				pins-cmd-clk-dat-rst {
+					pinmux = <PINMUX_GPIO172__FUNC_MSDC0_CMD>,
+						 <PINMUX_GPIO173__FUNC_MSDC0_DSL>,
+						 <PINMUX_GPIO174__FUNC_MSDC0_CLK>,
+						 <PINMUX_GPIO175__FUNC_MSDC0_DAT0>,
+						 <PINMUX_GPIO176__FUNC_MSDC0_DAT1>,
+						 <PINMUX_GPIO177__FUNC_MSDC0_DAT2>,
+						 <PINMUX_GPIO178__FUNC_MSDC0_DAT3>,
+						 <PINMUX_GPIO179__FUNC_MSDC0_DAT4>,
+						 <PINMUX_GPIO180__FUNC_MSDC0_DAT5>,
+						 <PINMUX_GPIO181__FUNC_MSDC0_DAT6>,
+						 <PINMUX_GPIO182__FUNC_MSDC0_DAT7>,
+						 <PINMUX_GPIO183__FUNC_MSDC0_RSTB>;
+
+				};
+			};
+
+			mmc0_pins_uhs: mmc0-uhs-pins {
+				pins-cmd-clk-dat-rst {
+					pinmux = <PINMUX_GPIO172__FUNC_MSDC0_CMD>,
+						 <PINMUX_GPIO173__FUNC_MSDC0_DSL>,
+						 <PINMUX_GPIO174__FUNC_MSDC0_CLK>,
+						 <PINMUX_GPIO175__FUNC_MSDC0_DAT0>,
+						 <PINMUX_GPIO176__FUNC_MSDC0_DAT1>,
+						 <PINMUX_GPIO177__FUNC_MSDC0_DAT2>,
+						 <PINMUX_GPIO178__FUNC_MSDC0_DAT3>,
+						 <PINMUX_GPIO179__FUNC_MSDC0_DAT4>,
+						 <PINMUX_GPIO180__FUNC_MSDC0_DAT5>,
+						 <PINMUX_GPIO181__FUNC_MSDC0_DAT6>,
+						 <PINMUX_GPIO182__FUNC_MSDC0_DAT7>,
+						 <PINMUX_GPIO183__FUNC_MSDC0_RSTB>;
+
+				};
+			};
+
+			mmc1_pins_default: mmc1-default-pins {
+				pins-cmd-clk-dat {
+					pinmux = <PINMUX_GPIO166__FUNC_MSDC1_CMD>,
+						 <PINMUX_GPIO167__FUNC_MSDC1_CLK>,
+						 <PINMUX_GPIO168__FUNC_MSDC1_DAT0>,
+						 <PINMUX_GPIO169__FUNC_MSDC1_DAT1>,
+						 <PINMUX_GPIO170__FUNC_MSDC1_DAT2>,
+						 <PINMUX_GPIO171__FUNC_MSDC1_DAT3>;
+
+				};
+			};
+
+			mmc1_pins_uhs: mmc1-uhs-pins {
+				pins-cmd-clk-dat {
+					pinmux = <PINMUX_GPIO166__FUNC_MSDC1_CMD>,
+						 <PINMUX_GPIO167__FUNC_MSDC1_CLK>,
+						 <PINMUX_GPIO168__FUNC_MSDC1_DAT0>,
+						 <PINMUX_GPIO169__FUNC_MSDC1_DAT1>,
+						 <PINMUX_GPIO170__FUNC_MSDC1_DAT2>,
+						 <PINMUX_GPIO171__FUNC_MSDC1_DAT3>;
+
+				};
+			};
+
+
+
+
+		};
+
+		toprgu: reset-controller@10212000 {
+			compatible = "mediatek,mt6735-wdt";
+			reg = <0 0x10212000 0 0x1000>;
+			interrupts = <GIC_SPI 128 IRQ_TYPE_LEVEL_LOW>;
+			timeout-sec = <30>;
+			#reset-cells = <1>;
+		};
+
+		gic: interrupt-controller@10221000 {
+			compatible = "arm,gic-400";
+			reg = <0 0x10221000 0 0x1000>,
+			      <0 0x10222000 0 0x2000>,
+			      <0 0x10224000 0 0x2000>,
+			      <0 0x10226000 0 0x2000>;
+			#address-cells = <0>;
+			interrupt-controller;
+			#interrupt-cells = <3>;
+			interrupt-parent = <&gic>;
+		};
+
+		uart0: serial@11002000 {
+			compatible = "mediatek,mt6735-uart", "mediatek,mt6577-uart";
+			reg = <0 0x11002000 0 0x1000>;
+			interrupts = <GIC_SPI 91 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&topckgen CLK_TOP_UART_SEL>, <&pericfg CLK_PERI_UART0>;
+			clock-names = "baud", "bus";
+
+			status = "disabled";
+		};
+
+		uart1: serial@11003000 {
+			compatible = "mediatek,mt6735-uart", "mediatek,mt6577-uart";
+			reg = <0 0x11003000 0 0x1000>;
+			interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&topckgen CLK_TOP_UART_SEL>, <&pericfg CLK_PERI_UART1>;
+			clock-names = "baud", "bus";
+
+			status = "disabled";
+		};
+
+		uart2: serial@11004000 {
+			compatible = "mediatek,mt6735-uart", "mediatek,mt6577-uart";
+			reg = <0 0x11004000 0 0x1000>;
+			interrupts = <GIC_SPI 93 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&topckgen CLK_TOP_UART_SEL>, <&pericfg CLK_PERI_UART2>;
+			clock-names = "baud", "bus";
+
+			status = "disabled";
+		};
+
+		uart3: serial@11005000 {
+			compatible = "mediatek,mt6735-uart", "mediatek,mt6577-uart";
+			reg = <0 0x11005000 0 0x1000>;
+			interrupts = <GIC_SPI 94 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&topckgen CLK_TOP_UART_SEL>, <&pericfg CLK_PERI_UART3>;
+			clock-names = "baud", "bus";
+
+			status = "disabled";
+		};
+
+		i2c0: i2c@11007000 {
+			compatible = "mediatek,mt6735-i2c", "mediatek,mt8173-i2c";
+			reg = <0 0x11007000 0 0x70>,
+			      <0 0x11000180 0 0x80>;
+
+			interrupts = <GIC_SPI 84 IRQ_TYPE_LEVEL_LOW>;
+
+			clocks = <&pericfg CLK_PERI_I2C0>, <&pericfg CLK_PERI_APDMA>;
+			clock-names = "main", "dma";
+			clock-div = <16>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c0_default>;
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			status = "disabled";
+		};
+
+		i2c1: i2c@11008000 {
+			compatible = "mediatek,mt6735-i2c", "mediatek,mt8173-i2c";
+			reg = <0 0x11008000 0 0x70>,
+			      <0 0x11000200 0 0x80>;
+
+			interrupts = <GIC_SPI 85 IRQ_TYPE_LEVEL_LOW>;
+
+			clocks = <&pericfg CLK_PERI_I2C1>, <&pericfg CLK_PERI_APDMA>;
+			clock-names = "main", "dma";
+			clock-div = <16>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c1_default>;
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			status = "disabled";
+		};
+
+		i2c2: i2c@11009000 {
+			compatible = "mediatek,mt6735-i2c", "mediatek,mt8173-i2c";
+			reg = <0 0x11009000 0 0x70>,
+			      <0 0x11000280 0 0x80>;
+
+			interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL_LOW>;
+
+			clocks = <&pericfg CLK_PERI_I2C2>, <&pericfg CLK_PERI_APDMA>;
+			clock-names = "main", "dma";
+			clock-div = <16>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c2_default>;
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			status = "disabled";
+		};
+
+		i2c3: i2c@1100f000 {
+			compatible = "mediatek,mt6735-i2c", "mediatek,mt8173-i2c";
+			reg = <0 0x1100f000 0 0x70>,
+			      <0 0x11000300 0 0x80>;
+
+			interrupts = <GIC_SPI 87 IRQ_TYPE_LEVEL_LOW>;
+
+			clocks = <&pericfg CLK_PERI_I2C3>, <&pericfg CLK_PERI_APDMA>;
+			clock-names = "main", "dma";
+			clock-div = <16>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c3_default>;
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			status = "disabled";
+		};
+
+		usb2: usb@11200000 {
+			compatible = "mediatek,mt6735-musb", "mediatek,mtk-musb";
+			reg = <0 0x11200000 0 0x1000>;
+			interrupts = <GIC_SPI 72 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "mc";
+			clocks = <&pericfg CLK_PERI_USB0>,
+				 <&system_clk>,
+				 <&topckgen CLK_TOP_UNIVPLL_D26>;
+			clock-names = "main", "mcu", "univpll";
+
+			phys = <&usb2port0 PHY_TYPE_USB2>;
+
+			status = "disabled";
+		};
+
+		usb2phy: phy@11210000 {
+			compatible = "mediatek,mt6735-tphy", "mediatek,generic-tphy-v1";
+			reg = <0 0x11210000 0 0x800>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			status = "disabled";
+
+			usb2port0: usb-phy@11210800 {
+				reg = <0 0x11210800 0 0x100>;
+				clocks = <&pericfg CLK_PERI_USB0>;
+				clock-names = "ref";
+				#phy-cells = <1>;
+			};
+
+
+
+
+
+
+		};
+
+		/*
+		 * MMSYS display subsystem.  Addresses and interrupts are from
+		 * the vendor 4.9 tree (mt6735m.dts dispsys node and
+		 * mt6735m/ddp_reg.h ddp_reg_pa_base / ddp_irq_num); register
+		 * layouts are pinned per node by the compatible fallback.
+		 *
+		 * All blocks live in the DISP power domain.  Nodes stay
+		 * disabled until a board enables them.
+		 */
+		mmsys: syscon@14000000 {
+			compatible = "mediatek,mt6735-mmsys", "syscon";
+			reg = <0 0x14000000 0 0x1000>;
+			#clock-cells = <1>;
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
+			status = "disabled";
+		};
+
+		mutex: mutex@14015000 {
+			compatible = "mediatek,mt6735-disp-mutex";
+			reg = <0 0x14015000 0 0x1000>;
+			interrupts = <GIC_SPI 186 IRQ_TYPE_LEVEL_LOW>;
+			status = "disabled";
+		};
+
+		/*
+		 * SMI larb0 (mmsys) and SMI common.  Addresses from the vendor
+		 * mt6735m.dts (smi_larb0@14016000, smi_common@14017000).
+		 * larb0 uses the mt8167-style per-larb MMU enable at 0xfc0.
+		 */
+		smi_larb0: larb@14016000 {
+			compatible = "mediatek,mt6735-smi-larb";
+			reg = <0 0x14016000 0 0x1000>;
+			mediatek,smi = <&smi_common>;
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
+			clocks = <&mmsys CLK_MM_DISP0_SMI_LARB0>,
+				 <&mmsys CLK_MM_DISP0_SMI_LARB0>;
+			clock-names = "apb", "smi";
+			status = "disabled";
+		};
+
+		smi_common: smi@14017000 {
+			compatible = "mediatek,mt6735-smi-common";
+			reg = <0 0x14017000 0 0x1000>;
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
+			clocks = <&mmsys CLK_MM_DISP0_SMI_COMMON>,
+				 <&mmsys CLK_MM_DISP0_SMI_COMMON>;
+			clock-names = "apb", "smi";
+			status = "disabled";
+		};
+
+		ovl0: ovl@14007000 {
+			/* L0_ADDR 0xf40, 4 layers: mt8173 layout */
+			compatible = "mediatek,mt6735-disp-ovl",
+				     "mediatek,mt8173-disp-ovl";
+			reg = <0 0x14007000 0 0x1000>;
+			interrupts = <GIC_SPI 193 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_OVL0>;
+			status = "disabled";
+		};
+
+		rdma0: rdma@14009000 {
+			/* MEM_START_ADDR 0xf00 == mt8173 */
+			compatible = "mediatek,mt6735-disp-rdma",
+				     "mediatek,mt8173-disp-rdma";
+			reg = <0 0x14009000 0 0x1000>;
+			interrupts = <GIC_SPI 195 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_RDMA0>;
+			status = "disabled";
+		};
+
+		color0: color@1400c000 {
+			compatible = "mediatek,mt6735-disp-color",
+				     "mediatek,mt8173-disp-color";
+			reg = <0 0x1400c000 0 0x1000>;
+			interrupts = <GIC_SPI 198 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_COLOR>;
+			status = "disabled";
+		};
+
+		ccorr0: ccorr@1400d000 {
+			/* EN 0x00 / CFG 0x20 / SIZE 0x30 / COEF_0 0x80 == mt8183 */
+			compatible = "mediatek,mt6735-disp-ccorr",
+				     "mediatek,mt8183-disp-ccorr";
+			reg = <0 0x1400d000 0 0x1000>;
+			interrupts = <GIC_SPI 199 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_CCORR>;
+			status = "disabled";
+		};
+
+		aal0: aal@1400e000 {
+			compatible = "mediatek,mt6735-disp-aal",
+				     "mediatek,mt8173-disp-aal";
+			reg = <0 0x1400e000 0 0x1000>;
+			interrupts = <GIC_SPI 200 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_AAL>;
+			status = "disabled";
+		};
+
+		gamma0: gamma@1400f000 {
+			compatible = "mediatek,mt6735-disp-gamma",
+				     "mediatek,mt8173-disp-gamma";
+			reg = <0 0x1400f000 0 0x1000>;
+			interrupts = <GIC_SPI 201 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_GAMMA>;
+			status = "disabled";
+		};
+
+		dither0: dither@14010000 {
+			/* EN 0x00 / CFG 0x20 / SIZE 0x30 == mt8183 */
+			compatible = "mediatek,mt6735-disp-dither",
+				     "mediatek,mt8183-disp-dither";
+			reg = <0 0x14010000 0 0x1000>;
+			interrupts = <GIC_SPI 202 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP0_DISP_DITHER>;
+			status = "disabled";
+		};
+
+		dsi0: dsi@14012000 {
+			compatible = "mediatek,mt6735-dsi", "mediatek,mt8173-dsi";
+			reg = <0 0x14012000 0 0x1000>;
+			interrupts = <GIC_SPI 204 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&mmsys CLK_MM_DISP1_DSI_ENGINE>,
+				 <&mmsys CLK_MM_DISP1_DSI_DIGITAL>,
+				 <&mipi_tx0>;
+			clock-names = "engine", "digital", "hs";
+			phys = <&mipi_tx0>;
+			phy-names = "dphy";
+			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		/*
+		 * Vendor MIPI_TX_CONFIG@0x14018000.  The vendor register dump
+		 * in ddp_reg.h (CON 0x00, lanes 0x04-0x14, TOP_CON 0x40,
+		 * BG_CON 0x44, PLL_CON0-3 0x50-0x5c, SW_CTRL 0x80) matches
+		 * mt8173 offset for offset.
+		 */
+		mipi_tx0: dsi-phy@14018000 {
+			compatible = "mediatek,mt8173-mipi-tx";
+			reg = <0 0x14018000 0 0x1000>;
+			clocks = <&clk26m>;
+			clock-output-names = "mipi_tx0_pll";
+			#clock-cells = <0>;
+			#phy-cells = <0>;
+			status = "disabled";
+		};
+
+		disp_pwm0: pwm@1100e000 {
+			compatible = "mediatek,mt8173-disp-pwm";
+			reg = <0 0x1100e000 0 0x1000>;
+			#pwm-cells = <2>;
+			clocks = <&pericfg CLK_PERI_DISP_PWM>,
+				 <&pericfg CLK_PERI_DISP_PWM>;
+			clock-names = "main", "mm";
+			status = "disabled";
+		};
+
+		mmc0: mmc@11230000 {
+			compatible = "mediatek,mt6735-mmc";
+			reg = <0 0x11230000 0 0x1000>;
+			interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&pericfg CLK_PERI_MSDC30_0>,
+				 <&topckgen CLK_TOP_MSDC50_0_SEL>;
+			clock-names = "source", "hclk";
+			resets = <&pericfg MT6735_PERI_RST0_MSDC0>;
+
+			pinctrl-names = "default", "state_uhs";
+			pinctrl-0 = <&mmc0_pins_default>;
+			pinctrl-1 = <&mmc0_pins_uhs>;
+
+			status = "disabled";
+		};
+
+		mmc1: mmc@11240000 {
+			compatible = "mediatek,mt6735-mmc";
+			reg = <0 0x11240000 0 0x1000>;
+			interrupts = <GIC_SPI 80 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&pericfg CLK_PERI_MSDC30_1>,
+				 <&topckgen CLK_TOP_AXI_SEL>;
+			clock-names = "source", "hclk";
+			resets = <&pericfg MT6735_PERI_RST0_MSDC1>;
+
+			pinctrl-names = "default", "state_uhs";
+			pinctrl-0 = <&mmc1_pins_default>;
+			pinctrl-1 = <&mmc1_pins_uhs>;
+
+			status = "disabled";
+		};
+
+	};
+};

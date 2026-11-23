@@ -397,8 +397,16 @@ int mtk_build_eint(struct mtk_pinctrl *hw, struct platform_device *pdev)
 
 	for (i = hw->soc->nbase_names, j = 0; i < count_reg_names; i++, j++) {
 		hw->eint->base[j] = of_iomap(np, i);
-		if (IS_ERR(hw->eint->base[j])) {
-			ret = PTR_ERR(hw->eint->base[j]);
+		/*
+		 * of_iomap() returns NULL (not an ERR_PTR) on failure, e.g. when
+		 * "reg" has fewer entries than "reg-names" so the eint region is
+		 * missing. A NULL base here would later fault in mtk_eint_hw_init()
+		 * (writel to NULL), so reject it explicitly instead of relying on
+		 * IS_ERR() alone.
+		 */
+		if (!hw->eint->base[j] || IS_ERR(hw->eint->base[j])) {
+			ret = hw->eint->base[j] ? PTR_ERR(hw->eint->base[j]) : -ENXIO;
+			hw->eint->base[j] = NULL;
 			goto err_free_eint;
 		}
 	}

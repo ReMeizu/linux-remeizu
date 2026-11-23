@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2017 MediaTek, Inc.
+ * Copyright (c) 2022 Yassine Oudjana <y.oudjana@protonmail.com>
  *
  * Author: Chen Zhong <chen.zhong@mediatek.com>
  */
@@ -9,7 +10,9 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mfd/mt6323/registers.h>
+#include <linux/mfd/mt6328/registers.h>
 #include <linux/mfd/mt6331/registers.h>
+#include <linux/mfd/mt6351/registers.h>
 #include <linux/mfd/mt6357/registers.h>
 #include <linux/mfd/mt6358/registers.h>
 #include <linux/mfd/mt6359/registers.h>
@@ -28,6 +31,10 @@
 #define MTK_PMIC_MT6331_RST_DU_MASK	GENMASK(13, 12)
 #define MTK_PMIC_MT6331_PWRKEY_RST	BIT(9)
 #define MTK_PMIC_MT6331_HOMEKEY_RST	BIT(8)
+
+#define MTK_PMIC_MT6328_RST_DU_MASK	GENMASK(13, 12)
+#define MTK_PMIC_MT6328_PWRKEY_RST	BIT(9)
+#define MTK_PMIC_MT6328_HOMEKEY_RST	BIT(8)
 
 #define MTK_PMIC_PWRKEY_INDEX	0
 #define MTK_PMIC_HOMEKEY_INDEX	1
@@ -78,6 +85,35 @@ static const struct mtk_pmic_regs mt6323_regs = {
 		0x4, MT6323_INT_MISC_CON, 0x8, MTK_PMIC_HOMEKEY_RST),
 	.pmic_rst_reg = MT6323_TOP_RST_MISC,
 	.rst_lprst_mask = MTK_PMIC_RST_DU_MASK,
+};
+
+static const struct mtk_pmic_regs mt6328_regs = {
+	.keys_regs[MTK_PMIC_PWRKEY_INDEX] =
+		MTK_PMIC_KEYS_REGS(MT6328_TOPSTATUS,
+		0x2, MT6328_INT_MISC_CON, 0x4, MTK_PMIC_MT6328_PWRKEY_RST),
+	.keys_regs[MTK_PMIC_HOMEKEY_INDEX] =
+		MTK_PMIC_KEYS_REGS(MT6328_TOPSTATUS,
+		0x4, MT6328_INT_MISC_CON, 0x2, MTK_PMIC_MT6328_HOMEKEY_RST),
+	.pmic_rst_reg = MT6328_TOP_RST_MISC,
+	.rst_lprst_mask = MTK_PMIC_MT6328_RST_DU_MASK,
+	.key_release_irq = true,
+};
+
+/*
+ * MT6351 (MT6755/MT6797 phones): the key bits sit at the MT6328 positions,
+ * only INT_MISC_CON and TOP_RST_MISC moved (vendor upmu_hw.h, MT6351_PMIC_
+ * PWRKEY_DEB/HOMEKEY_DEB, RG_*KEY_INT_SEL, RG_*KEY_RST_EN, RG_PWRKEY_RST_TD).
+ */
+static const struct mtk_pmic_regs mt6351_regs = {
+	.keys_regs[MTK_PMIC_PWRKEY_INDEX] =
+		MTK_PMIC_KEYS_REGS(MT6351_TOPSTATUS,
+		0x2, MT6351_INT_MISC_CON, 0x4, MTK_PMIC_MT6328_PWRKEY_RST),
+	.keys_regs[MTK_PMIC_HOMEKEY_INDEX] =
+		MTK_PMIC_KEYS_REGS(MT6351_TOPSTATUS,
+		0x4, MT6351_INT_MISC_CON, 0x2, MTK_PMIC_MT6328_HOMEKEY_RST),
+	.pmic_rst_reg = MT6351_TOP_RST_MISC,
+	.rst_lprst_mask = MTK_PMIC_MT6328_RST_DU_MASK,
+	.key_release_irq = true,
 };
 
 static const struct mtk_pmic_regs mt6331_regs = {
@@ -304,6 +340,12 @@ static const struct of_device_id of_mtk_pmic_keys_match_tbl[] = {
 	}, {
 		.compatible = "mediatek,mt6323-keys",
 		.data = &mt6323_regs,
+	}, {
+		.compatible = "mediatek,mt6328-keys",
+		.data = &mt6328_regs,
+	}, {
+		.compatible = "mediatek,mt6351-keys",
+		.data = &mt6351_regs,
 	}, {
 		.compatible = "mediatek,mt6331-keys",
 		.data = &mt6331_regs,

@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/panel/fitipower,ft8716.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Fitipower FT8716 1080x1920 MIPI-DSI panel
+
+maintainers:
+  - ReMeizu <rap.player2006@gmail.com>
+
+description: |
+  The FT8716 is a 4-lane MIPI-DSI panel controller used in the Meizu MX6
+  (1080x1920, RGB888, burst video mode).
+
+allOf:
+  - $ref: panel-common.yaml#
+
+properties:
+  compatible:
+    const: fitipower,ft8716
+
+  reg:
+    maxItems: 1
+
+  reset-gpios: true
+  port: true
+
+  vddi-supply:
+    description: 1.8 V digital supply
+
+  avdd-supply:
+    description: Positive bias rail (TPS65132 VPOS)
+
+  avee-supply:
+    description: Negative bias rail (TPS65132 VNEG)
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+  - vddi-supply
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    panel@0 {
+        compatible = "fitipower,ft8716";
+        reg = <0>;
+
+        vddi-supply = <&vddi18>;
+        reset-gpios = <&pio 180 GPIO_ACTIVE_LOW>;
+
+        port {
+            panel_in: endpoint {
+                remote-endpoint = <&dsi0_out>;
+            };
+        };
+    };
+
+...

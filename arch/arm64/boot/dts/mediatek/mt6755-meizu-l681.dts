@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+
+#include "mt6755-meizu-m3note.dtsi"
+
+/ {
+	model = "Meizu M3 Note (L681)";
+	compatible = "meizu,l681", "mediatek,mt6755";
+};

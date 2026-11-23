@@ -136,13 +136,13 @@ config PINCTRL_MT6735
 	  the MediaTek MT6735 and MT6735M SoCs.
 
 config PINCTRL_MT6755
-	bool "MediaTek MT6755 pin control"
+	bool "MediaTek MT6750/MT6755 pin control"
 	depends on OF
 	depends on ARM64 || COMPILE_TEST
 	select PINCTRL_MTK_PARIS
 	help
 	  Pin multiplexing, GPIO configuration and external interrupts for
-	  the MediaTek MT6755 SoC.
+	  the MediaTek MT6750 and MT6755 SoCs.
 
 config PINCTRL_AIROHA
 	tristate "Airoha EN7581 pin control"

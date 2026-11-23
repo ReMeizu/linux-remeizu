@@ -436,7 +436,19 @@ static int mtk_wdt_probe(struct platform_device *pdev)
 
 	watchdog_init_timeout(&mtk_wdt->wdt_dev, timeout, dev);
 	watchdog_set_nowayout(&mtk_wdt->wdt_dev, nowayout);
-	watchdog_set_restart_priority(&mtk_wdt->wdt_dev, 128);
+	/*
+	 * Priority 192 (was 128) — ABOVE the PSCI restart handler's 129
+	 * (drivers/firmware/psci/psci.c:329). On the Meizu m681 the secure
+	 * world's PSCI SYSTEM_RESET hangs (custom Meizu ATF): a plain
+	 * `reboot`/sysrq-b froze the device with no reset (user had to pull
+	 * the battery), while a direct TOPRGU SWRST resets fine. Since the
+	 * chain runs highest-priority-first, PSCI (129) was tried first and
+	 * never returned, so this watchdog handler (128) was never reached.
+	 * Bumping above PSCI makes the reliable TOPRGU reset win. Verified
+	 * live: the same SWRST sequence resets the SoC; PSCI/mtk_wdt-128 did
+	 * not.
+	 */
+	watchdog_set_restart_priority(&mtk_wdt->wdt_dev, 192);
 
 	watchdog_set_drvdata(&mtk_wdt->wdt_dev, mtk_wdt);
 
@@ -495,6 +507,7 @@ static const struct of_device_id mtk_wdt_dt_ids[] = {
 	{ .compatible = "mediatek,mt2712-wdt", .data = &mt2712_data },
 	{ .compatible = "mediatek,mt6589-wdt" },
 	{ .compatible = "mediatek,mt6735-wdt", .data = &mt6735_data },
+	{ .compatible = "mediatek,mt6750-wdt" },
 	{ .compatible = "mediatek,mt6795-wdt", .data = &mt6795_data },
 	{ .compatible = "mediatek,mt7986-wdt", .data = &mt7986_data },
 	{ .compatible = "mediatek,mt7988-wdt", .data = &mt7988_data },

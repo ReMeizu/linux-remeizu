@@ -132,6 +132,17 @@ static void mtk_pll_set_rate_regs(struct mtk_clk_pll *pll, u32 pcw,
 	__mtk_pll_tuner_enable(pll);
 
 	udelay(20);
+
+	/*
+	 * m681 r91 DEBUG SPIN (ARM PLLs only): trace the exact words DVFS
+	 * writes — the r86 flight left CON1 postdiv-only/PCW=0 while the
+	 * identical manual MMIO sequence works (BRINGUP_STATE 2026-07-10).
+	 * Remove with the cpufreq root-cause fix.
+	 */
+	if (!strncmp(pll->data->name, "arm", 3))
+		pr_info("mtk_pll %s: pcw=0x%x postdiv=%d wrote=0x%x chg_w=0x%x rb=0x%x\n",
+			pll->data->name, pcw, postdiv, val, chg,
+			readl(pll->pcw_addr));
 }
 
 /*

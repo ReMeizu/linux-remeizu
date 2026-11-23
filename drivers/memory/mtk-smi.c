@@ -77,6 +77,19 @@
 /* mt8173 */
 #define MT8173_SMI_LARB_MMU_EN		0xf00
 
+/*
+ * mt6735/mt6737m: same per-port MMU enable register as mt8167 (0xfc0).
+ * The vendor M4U driver uses it for every larb (m4u/mt6735/mt6735m/
+ * m4u_reg.h:311) and the display driver disables the larb0 MMU through
+ * DISPSYS_SMI_LARB0_BASE + 0xfc0 (video/mt6735/dispsys/mt6735m/ddp_reg.h:1869,
+ * ddp_drv.c:867).  The 0xf00 in smi/smi_reg.h:327 is a generic define that
+ * the mt6735 SMI code never writes.
+ */
+#define MT6735_SMI_LARB_MMU_EN		0xfc0
+
+/* mt6735 larb control registers (smi/smi_reg.h:275,280) */
+#define SMI_LARB_VC_PRI_MODE		0x20
+
 /* general */
 #define SMI_LARB_NONSEC_CON(id)		(0x380 + ((id) * 4))
 #define F_MMU_EN			BIT(0)
@@ -225,6 +238,28 @@ static int mtk_smi_larb_config_port_mt8167(struct device *dev)
 	struct mtk_smi_larb *larb = dev_get_drvdata(dev);
 
 	writel(*larb->mmu, larb->base + MT8167_SMI_LARB_MMU_EN);
+	return 0;
+}
+
+static int mtk_smi_larb_config_port_mt6735(struct device *dev)
+{
+	struct mtk_smi_larb *larb = dev_get_drvdata(dev);
+
+	/*
+	 * Vendor larb0 init writes VC_PRI_MODE = 0 and SW_FLAG = 1
+	 * (smi/smi_config_mt6735m.h, smi_larb0_config_pair).
+	 */
+	writel_relaxed(0, larb->base + SMI_LARB_VC_PRI_MODE);
+	writel_relaxed(SMI_LARB_SW_FLAG_1, larb->base + SMI_LARB_SW_FLAG);
+
+	/*
+	 * One bit per port, F_SMI_MMU_EN(port, en) = en << port
+	 * (m4u/mt6735/mt6735m/m4u_reg.h:312).  The IOMMU master fills
+	 * larb->mmu; MT6735 has no mainline IOMMU consumer yet, so keep the
+	 * MMU bypassed (the vendor display driver does the same at boot).
+	 */
+	writel_relaxed(larb->mmu ? *larb->mmu : 0,
+		       larb->base + MT6735_SMI_LARB_MMU_EN);
 	return 0;
 }
 
@@ -509,6 +544,19 @@ static const struct mtk_smi_larb_gen mtk_smi_larb_mt8167 = {
 	.config_port = mtk_smi_larb_config_port_mt8167,
 };
 
+static const struct mtk_smi_larb_gen mtk_smi_larb_mt6735 = {
+	/*
+	 * mt6735/mt6737m larb0 (mmsys, 8 ports) uses the mt8167-style
+	 * per-larb MMU enable at 0xfc0, so no port table is needed here.
+	 * Vendor larb0 port order (m4u/mt6735/mt6735m/m4u_port.h):
+	 * 0 DISP_OVL0, 1 DISP_OVL1, 2 DISP_RDMA0, 3 DISP_WDMA0,
+	 * 4 MDP_RDMA, 5 MDP_WDMA, 6 MDP_WROT, 7 DISP_FAKE.
+	 * Vendor OSTD init values exist (smi_config_mt6735m.h:55,
+	 * smi_larb0_init_pair) but the mt8167 path does not program them.
+	 */
+	.config_port = mtk_smi_larb_config_port_mt6735,
+};
+
 static const struct mtk_smi_larb_gen mtk_smi_larb_mt8173 = {
 	/* mt8173 do not need the port in larb */
 	.config_port = mtk_smi_larb_config_port_mt8173,
@@ -548,6 +596,7 @@ static const struct mtk_smi_larb_gen mtk_smi_larb_mt8195 = {
 static const struct of_device_id mtk_smi_larb_of_ids[] = {
 	{.compatible = "mediatek,mt2701-smi-larb", .data = &mtk_smi_larb_mt2701},
 	{.compatible = "mediatek,mt2712-smi-larb", .data = &mtk_smi_larb_mt2712},
+	{.compatible = "mediatek,mt6735-smi-larb", .data = &mtk_smi_larb_mt6735},
 	{.compatible = "mediatek,mt6779-smi-larb", .data = &mtk_smi_larb_mt6779},
 	{.compatible = "mediatek,mt6795-smi-larb", .data = &mtk_smi_larb_mt8173},
 	{.compatible = "mediatek,mt6893-smi-larb", .data = &mtk_smi_larb_mt6893},
@@ -743,6 +792,18 @@ static const struct mtk_smi_reg_pair mtk_smi_common_mt6795_init[SMI_COMMON_INIT_
 	{SMI_READ_FIFO_TH, 0x191f},
 };
 
+/*
+ * MT6735/MT6737M: the SMI common register layout is the generation-2 one
+ * (L1LEN 0x100, READ_FIFO_TH 0x230, M4U_TH 0x234, DUMMY 0x444).  Values are
+ * the vendor smi_comm_config_pair table (smi_config_mt6735m.h).
+ */
+static const struct mtk_smi_reg_pair mtk_smi_common_mt6735_init[SMI_COMMON_INIT_REGS_NR] = {
+	{SMI_L1LEN, 0xb},
+	{SMI_READ_FIFO_TH, 0x747},
+	{SMI_M4U_TH, 0xf7e19085},
+	{SMI_DUMMY, 0x1},
+};
+
 static const struct mtk_smi_reg_pair mtk_smi_common_mt8195_init[SMI_COMMON_INIT_REGS_NR] = {
 	{SMI_L1LEN, 0xb},
 	{SMI_M4U_TH, 0xe100e10},
@@ -758,6 +819,11 @@ static const struct mtk_smi_common_plat mtk_smi_common_gen1 = {
 
 static const struct mtk_smi_common_plat mtk_smi_common_gen2 = {
 	.type	  = MTK_SMI_GEN2,
+};
+
+static const struct mtk_smi_common_plat mtk_smi_common_mt6735 = {
+	.type	  = MTK_SMI_GEN2,
+	.init	  = mtk_smi_common_mt6735_init,
 };
 
 static const struct mtk_smi_common_plat mtk_smi_common_mt6779 = {
@@ -840,6 +906,7 @@ static const struct mtk_smi_common_plat mtk_smi_common_mt8365 = {
 static const struct of_device_id mtk_smi_common_of_ids[] = {
 	{.compatible = "mediatek,mt2701-smi-common", .data = &mtk_smi_common_gen1},
 	{.compatible = "mediatek,mt2712-smi-common", .data = &mtk_smi_common_gen2},
+	{.compatible = "mediatek,mt6735-smi-common", .data = &mtk_smi_common_mt6735},
 	{.compatible = "mediatek,mt6779-smi-common", .data = &mtk_smi_common_mt6779},
 	{.compatible = "mediatek,mt6795-smi-common", .data = &mtk_smi_common_mt6795},
 	{.compatible = "mediatek,mt6893-smi-common", .data = &mtk_smi_common_mt6893},

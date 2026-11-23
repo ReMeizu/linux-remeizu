@@ -644,7 +644,19 @@ static void mtk_crtc_ddp_irq(void *data)
 {
 	struct drm_crtc *crtc = data;
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
-	struct mtk_drm_private *priv = crtc->dev->dev_private;
+	struct mtk_drm_private *priv;
+
+	/*
+	 * m681: a bootloader-left OVL frame IRQ can reach this vblank callback
+	 * during the component bind, before the drm_crtc is fully registered —
+	 * crtc->dev is still NULL, so reading crtc->dev->dev_private faults at
+	 * 0x40 (the observed r44 Oops). Bail until the CRTC/driver are ready.
+	 */
+	if (!crtc->dev)
+		return;
+	priv = crtc->dev->dev_private;
+	if (!priv || !priv->data)
+		return;
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (!priv->data->shadow_register && !mtk_crtc->cmdq_client.chan)

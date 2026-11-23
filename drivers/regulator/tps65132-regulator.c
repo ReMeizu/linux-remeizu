@@ -51,6 +51,7 @@ struct tps65132_reg_pdata {
 	struct gpio_desc *act_dis_gpiod;
 	unsigned int act_dis_time_us;
 	int ena_gpio_state;
+	int last_sel;
 };
 
 struct tps65132_regulator {
@@ -70,6 +71,22 @@ static int tps65132_regulator_enable(struct regulator_dev *rdev)
 		rpdata->ena_gpio_state = 1;
 	}
 
+	/*
+	 * The chip shuts its digital block down (and stops ACKing on i2c)
+	 * when both ENs are low, and the VPOS/VNEG registers reset to the
+	 * NVM defaults. Re-apply the last requested voltage selector after
+	 * a GPIO re-enable, or the rail silently comes back at the default
+	 * (e.g. 5.0 V instead of a configured 5.5 V). Give the digital
+	 * block a moment to wake before talking to it.
+	 */
+	if (!IS_ERR(rpdata->en_gpiod) && rpdata->last_sel >= 0) {
+		usleep_range(1000, 2000);
+		ret = regulator_set_voltage_sel_regmap(rdev, rpdata->last_sel);
+		if (ret < 0)
+			dev_err(tps->dev, "Failed to restore voltage sel: %d\n",
+				ret);
+	}
+
 	/* Hardware automatically enable discharge bit in enable */
 	if (rdev->constraints->active_discharge ==
 			REGULATOR_ACTIVE_DISCHARGE_DISABLE) {
@@ -84,11 +101,36 @@ static int tps65132_regulator_enable(struct regulator_dev *rdev)
 	return 0;
 }
 
+static int tps65132_regulator_set_voltage_sel(struct regulator_dev *rdev,
+					      unsigned int sel)
+{
+	struct tps65132_regulator *tps = rdev_get_drvdata(rdev);
+	struct tps65132_reg_pdata *rpdata = &tps->reg_pdata[rdev_get_id(rdev)];
+	int ret;
+
+	ret = regulator_set_voltage_sel_regmap(rdev, sel);
+	if (!ret)
+		rpdata->last_sel = sel;
+	return ret;
+}
+
 static int tps65132_regulator_disable(struct regulator_dev *rdev)
 {
 	struct tps65132_regulator *tps = rdev_get_drvdata(rdev);
 	int id = rdev_get_id(rdev);
 	struct tps65132_reg_pdata *rpdata = &tps->reg_pdata[id];
+	int sel;
+
+	/*
+	 * Snapshot the live selector while the chip still answers (it goes
+	 * i2c-dead once both ENs are low). Covers the common case where the
+	 * bootloader pre-programmed the target voltage so the core never
+	 * called set_voltage_sel and last_sel is still unset — without this,
+	 * re-enable would leave the rail at the NVM default.
+	 */
+	sel = regulator_get_voltage_sel_regmap(rdev);
+	if (sel >= 0)
+		rpdata->last_sel = sel;
 
 	if (!IS_ERR(rpdata->en_gpiod)) {
 		gpiod_set_value_cansleep(rpdata->en_gpiod, 0);
@@ -124,7 +166,7 @@ static const struct regulator_ops tps65132_regulator_ops = {
 	.list_voltage = regulator_list_voltage_linear,
 	.map_voltage = regulator_map_voltage_linear,
 	.get_voltage_sel = regulator_get_voltage_sel_regmap,
-	.set_voltage_sel = regulator_set_voltage_sel_regmap,
+	.set_voltage_sel = tps65132_regulator_set_voltage_sel,
 	.set_active_discharge = regulator_set_active_discharge_regmap,
 };
 
@@ -245,6 +287,7 @@ static int tps65132_probe(struct i2c_client *client)
 	tps->dev = dev;
 
 	for (id = 0; id < TPS65132_MAX_REGULATORS; ++id) {
+		tps->reg_pdata[id].last_sel = -1;
 		config.regmap = rmap;
 		config.dev = dev;
 		config.driver_data = tps;

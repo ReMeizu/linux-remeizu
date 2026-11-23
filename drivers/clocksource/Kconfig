@@ -495,6 +495,15 @@ config MTK_TIMER
 	help
 	  Support for Mediatek timer driver.
 
+config MTK_CPUX_SECURE_TIMER
+	bool "MediaTek legacy secure CPUX system counter"
+	depends on ARM64 && OF && HAS_IOMEM
+	select TIMER_OF
+	help
+	  Initialize the MT6750 architected system counter through the legacy
+	  MediaTek MCUSYS SiP service. The secure monitor protects its index
+	  and data registers; direct MMIO writes cannot initialize this counter.
+
 config MTK_CPUX_TIMER
 	bool "MediaTek CPUX timer driver" if COMPILE_TEST
 	depends on HAS_IOMEM

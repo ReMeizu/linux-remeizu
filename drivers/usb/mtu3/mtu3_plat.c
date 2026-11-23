@@ -19,6 +19,11 @@
 #include "mtu3_dr.h"
 #include "mtu3_debug.h"
 
+struct mtu3_soc_data {
+	/* IP + U2 port must be powered up before PHY init (no USB power domain) */
+	bool power_up_ippc_early;
+};
+
 /* u2-port0 should be powered on and enabled; */
 int ssusb_check_clocks(struct ssusb_mtk *ssusb, u32 ex_clks)
 {
@@ -128,6 +133,31 @@ static void ssusb_phy_power_off(struct ssusb_mtk *ssusb)
 		phy_power_off(ssusb->phys[i]);
 }
 
+/*
+ * Power up the SSUSB IP and U2 port0 before the PHY is initialised.
+ *
+ * On SoCs without a USB power domain (e.g. MT6755) the block is left in the
+ * bootloader's powered-down state at probe time. The T-PHY's analog registers
+ * live behind the U2 port power gate, so phy_init() would access them while
+ * the port is unpowered and hang the bus. Deassert the IP reset, power up the
+ * device IP and clear the U2 port power-down/disable bits first, mirroring the
+ * vendor mu3d bring-up sequence. On SoCs where a genpd already powers the
+ * block this is a no-op that just re-clears bits which are already clear, so
+ * it is gated per-compatible via .power_up_ippc_early.
+ */
+static void ssusb_ip_power_up(struct ssusb_mtk *ssusb)
+{
+	void __iomem *ibase = ssusb->ippc_base;
+
+	/* deassert IP software reset */
+	mtu3_clrbits(ibase, U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+	/* power up the device IP */
+	mtu3_clrbits(ibase, U3D_SSUSB_IP_PW_CTRL2, SSUSB_IP_DEV_PDN);
+	/* power up and enable U2 port0 */
+	mtu3_clrbits(ibase, SSUSB_U2_CTRL(0),
+		     SSUSB_U2_PORT_DIS | SSUSB_U2_PORT_PDN);
+}
+
 static int ssusb_rscs_init(struct ssusb_mtk *ssusb)
 {
 	int ret = 0;
@@ -141,6 +171,9 @@ static int ssusb_rscs_init(struct ssusb_mtk *ssusb)
 	ret = clk_bulk_prepare_enable(BULK_CLKS_CNT, ssusb->clks);
 	if (ret)
 		goto clks_err;
+
+	if (ssusb->power_up_ippc_early)
+		ssusb_ip_power_up(ssusb);
 
 	ret = ssusb_phy_init(ssusb);
 	if (ret) {
@@ -221,8 +254,13 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 	struct otg_switch_mtk *otg_sx = &ssusb->otg_switch;
 	struct clk_bulk_data *clks = ssusb->clks;
 	struct device *dev = &pdev->dev;
+	const struct mtu3_soc_data *soc;
 	int i;
 	int ret;
+
+	soc = of_device_get_match_data(dev);
+	if (soc)
+		ssusb->power_up_ippc_early = soc->power_up_ippc_early;
 
 	ssusb->vusb33 = devm_regulator_get(dev, "vusb33");
 	if (IS_ERR(ssusb->vusb33)) {
@@ -612,8 +650,13 @@ static const struct dev_pm_ops mtu3_pm_ops = {
 
 #define DEV_PM_OPS (IS_ENABLED(CONFIG_PM) ? &mtu3_pm_ops : NULL)
 
+static const struct mtu3_soc_data mtu3_soc_mt6755 = {
+	.power_up_ippc_early = true,
+};
+
 static const struct of_device_id mtu3_of_match[] = {
 	{.compatible = "mediatek,mt8173-mtu3",},
+	{.compatible = "mediatek,mt6755-mtu3", .data = &mtu3_soc_mt6755,},
 	{.compatible = "mediatek,mtu3",},
 	{},
 };

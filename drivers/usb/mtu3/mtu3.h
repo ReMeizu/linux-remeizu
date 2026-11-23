@@ -255,6 +255,12 @@ struct ssusb_mtk {
 	struct otg_switch_mtk otg_switch;
 	enum usb_dr_mode dr_mode;
 	bool is_host;
+	/*
+	 * some SoCs (e.g. MT6755) have no USB power domain, so the IP and its
+	 * U2 port must be powered up in the driver before the T-PHY analog
+	 * registers can be touched, otherwise phy_init() hangs the bus
+	 */
+	bool power_up_ippc_early;
 	int u2_ports;
 	int u3_ports;
 	int u2p_dis_msk;
@@ -349,6 +355,9 @@ struct mtu3 {
 	enum usb_device_speed speed;
 
 	unsigned is_active:1;
+	/* device IRQ requested with IRQF_NO_AUTOEN; enabled only in mtu3_start
+	 * (gadget bind) to dodge a single-CPU probe-time livelock on m681 */
+	unsigned irq_enabled:1;
 	unsigned may_wakeup:1;
 	unsigned is_self_powered:1;
 	unsigned test_mode:1;

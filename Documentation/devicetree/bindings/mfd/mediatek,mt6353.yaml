@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/mediatek,mt6353.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6353 PMIC (storage rails)
+
+maintainers:
+  - forge <rap.player2006@gmail.com>
+
+description: |
+  MT6353 is connected to the SoC through the MediaTek PMIC wrapper. Only the
+  storage LDOs (VEMC, VMCH, VMC) are supported so far; the interrupt
+  controller, RTC, keys and the remaining regulators are not implemented.
+  The legacy interrupt register bank (INT_CON0 0x02b8 / INT_STATUS0 0x02d6)
+  does not match any supported MediaTek PMIC interrupt layout, so the nIRQ
+  line is optional and no interrupt-controller properties are accepted.
+
+properties:
+  compatible:
+    const: mediatek,mt6353
+
+  interrupts:
+    maxItems: 1
+    description: |
+      Optional PMIC nIRQ line. It is not used by the storage-only driver and
+      the EINT number is unproven, so boards should currently omit it.
+
+  "#address-cells":
+    const: 0
+
+  regulators:
+    type: object
+    $ref: /schemas/regulator/mediatek,mt6353-regulator.yaml
+    unevaluatedProperties: false
+
+required:
+  - compatible
+  - regulators
+
+additionalProperties: false

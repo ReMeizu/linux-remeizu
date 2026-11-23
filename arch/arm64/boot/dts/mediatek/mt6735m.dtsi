@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "mt6735.dtsi"
+
+/ {
+	compatible = "mediatek,mt6735m";
+};
+
+&pio {
+	compatible = "mediatek,mt6735m-pinctrl";
+	gpio-ranges = <&pio 0 0 198>;
+};
+
+&pwrap {
+	compatible = "mediatek,mt6735m-pwrap";
+};
+
+&mmc0 {
+	compatible = "mediatek,mt6735m-mmc";
+};
+
+&mmc1 {
+	compatible = "mediatek,mt6735m-mmc";
+};

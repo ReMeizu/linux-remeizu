@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014 MediaTek Inc.
+ * Copyright (c) 2022 Yassine Oudjana <y.oudjana@protonmail.com>
  * Author: Flora Fu, MediaTek
  */
 #include <linux/clk.h>
@@ -171,6 +172,23 @@ static const u32 mt6323_regs[] = {
 	[PWRAP_DEW_RDDMY_NO] =		0x01a4,
 };
 
+static const u32 mt6328_regs[] = {
+	[PWRAP_DEW_DIO_EN] =		0x02d4,
+	[PWRAP_DEW_READ_TEST] =		0x02d6,
+	[PWRAP_DEW_WRITE_TEST] =	0x02d8,
+	[PWRAP_DEW_CRC_SWRST] =		0x02da,
+	[PWRAP_DEW_CRC_EN] =		0x02dc,
+	[PWRAP_DEW_CRC_VAL] =		0x02de,
+	[PWRAP_DEW_MON_GRP_SEL] =	0x02e0,
+	[PWRAP_DEW_CIPHER_KEY_SEL] =	0x02e2,
+	[PWRAP_DEW_CIPHER_IV_SEL] =	0x02e4,
+	[PWRAP_DEW_CIPHER_EN] =		0x02e6,
+	[PWRAP_DEW_CIPHER_RDY] =	0x02e8,
+	[PWRAP_DEW_CIPHER_MODE] =	0x02ea,
+	[PWRAP_DEW_CIPHER_SWRST] =	0x02ec,
+	[PWRAP_DEW_RDDMY_NO] =		0x02ee,
+};
+
 static const u32 mt6331_regs[] = {
 	[PWRAP_DEW_DIO_EN] =		0x018c,
 	[PWRAP_DEW_READ_TEST] =		0x018e,
@@ -218,6 +236,21 @@ static const u32 mt6351_regs[] = {
 	[PWRAP_DEW_CIPHER_MODE] =	0x0308,
 	[PWRAP_DEW_CIPHER_SWRST] =	0x030A,
 	[PWRAP_DEW_RDDMY_NO] =		0x030C,
+};
+
+static const u32 mt6353_regs[] = {
+	[PWRAP_DEW_DIO_EN] =		0x0340,
+	[PWRAP_DEW_READ_TEST] =		0x0342,
+	[PWRAP_DEW_WRITE_TEST] =	0x0344,
+	[PWRAP_DEW_CRC_EN] =		0x0348,
+	[PWRAP_DEW_CRC_VAL] =		0x034a,
+	[PWRAP_DEW_CIPHER_KEY_SEL] =	0x034e,
+	[PWRAP_DEW_CIPHER_IV_SEL] =	0x0350,
+	[PWRAP_DEW_CIPHER_EN] =		0x0352,
+	[PWRAP_DEW_CIPHER_RDY] =	0x0354,
+	[PWRAP_DEW_CIPHER_MODE] =	0x0356,
+	[PWRAP_DEW_CIPHER_SWRST] =	0x0358,
+	[PWRAP_DEW_RDDMY_NO] =		0x035a,
 };
 
 static const u32 mt6357_regs[] = {
@@ -481,6 +514,48 @@ enum pwrap_regs {
 	/* MT8516 only regs */
 	PWRAP_OP_TYPE,
 	PWRAP_MSB_FIRST,
+	PWRAP_INIT_DONE3,
+	PWRAP_MD_ADC_RDATA_ADDR_LATEST,
+	PWRAP_MD_ADC_RDATA_ADDR_R0,
+	PWRAP_MD_ADC_RDATA_ADDR_R1,
+	PWRAP_MD_ADC_RDATA_ADDR_R10,
+	PWRAP_MD_ADC_RDATA_ADDR_R11,
+	PWRAP_MD_ADC_RDATA_ADDR_R12,
+	PWRAP_MD_ADC_RDATA_ADDR_R13,
+	PWRAP_MD_ADC_RDATA_ADDR_R14,
+	PWRAP_MD_ADC_RDATA_ADDR_R15,
+	PWRAP_MD_ADC_RDATA_ADDR_R16,
+	PWRAP_MD_ADC_RDATA_ADDR_R17,
+	PWRAP_MD_ADC_RDATA_ADDR_R18,
+	PWRAP_MD_ADC_RDATA_ADDR_R19,
+	PWRAP_MD_ADC_RDATA_ADDR_R2,
+	PWRAP_MD_ADC_RDATA_ADDR_R20,
+	PWRAP_MD_ADC_RDATA_ADDR_R21,
+	PWRAP_MD_ADC_RDATA_ADDR_R22,
+	PWRAP_MD_ADC_RDATA_ADDR_R23,
+	PWRAP_MD_ADC_RDATA_ADDR_R24,
+	PWRAP_MD_ADC_RDATA_ADDR_R25,
+	PWRAP_MD_ADC_RDATA_ADDR_R26,
+	PWRAP_MD_ADC_RDATA_ADDR_R27,
+	PWRAP_MD_ADC_RDATA_ADDR_R28,
+	PWRAP_MD_ADC_RDATA_ADDR_R29,
+	PWRAP_MD_ADC_RDATA_ADDR_R3,
+	PWRAP_MD_ADC_RDATA_ADDR_R30,
+	PWRAP_MD_ADC_RDATA_ADDR_R31,
+	PWRAP_MD_ADC_RDATA_ADDR_R4,
+	PWRAP_MD_ADC_RDATA_ADDR_R5,
+	PWRAP_MD_ADC_RDATA_ADDR_R6,
+	PWRAP_MD_ADC_RDATA_ADDR_R7,
+	PWRAP_MD_ADC_RDATA_ADDR_R8,
+	PWRAP_MD_ADC_RDATA_ADDR_R9,
+	PWRAP_MD_ADC_RDATA_ADDR_WP,
+	PWRAP_MD_ADC_STA0,
+	PWRAP_MD_ADC_STA1,
+	PWRAP_MD_ADC_STA2,
+	PWRAP_WACS3_CMD,
+	PWRAP_WACS3_EN,
+	PWRAP_WACS3_RDATA,
+	PWRAP_WACS3_VLDCLR,
 };
 
 static const int mt2701_regs[] = {
@@ -567,6 +642,301 @@ static const int mt2701_regs[] = {
 	[PWRAP_ADC_RDY_ADDR] =		0x14c,
 	[PWRAP_ADC_RDATA_ADDR1] =	0x150,
 	[PWRAP_ADC_RDATA_ADDR2] =	0x154,
+};
+
+static const int mt6735_regs[] = {
+	[PWRAP_MUX_SEL] =			0x0,
+	[PWRAP_WRAP_EN] =			0x4,
+	[PWRAP_DIO_EN] =			0x8,
+	[PWRAP_SIDLY] =				0xc,
+	[PWRAP_RDDMY] =				0x10,
+	[PWRAP_SI_CK_CON] =			0x14,
+	[PWRAP_CSHEXT_WRITE] =			0x18,
+	[PWRAP_CSHEXT_READ] =			0x1c,
+	[PWRAP_CSLEXT_START] =			0x20,
+	[PWRAP_CSLEXT_END] =			0x24,
+	[PWRAP_STAUPD_PRD] =			0x28,
+	[PWRAP_STAUPD_GRPEN] =			0x2c,
+	[PWRAP_EINT_STA0_ADR] =			0x30,
+	[PWRAP_EINT_STA1_ADR] =			0x34,
+	[PWRAP_STA] =				0x38,
+	[PWRAP_CLR] =				0x3c,
+	[PWRAP_STAUPD_MAN_TRIG] =		0x40,
+	[PWRAP_STAUPD_STA] =			0x44,
+	[PWRAP_WRAP_STA] =			0x48,
+	[PWRAP_HARB_INIT] =			0x4c,
+	[PWRAP_HARB_HPRIO] =			0x50,
+	[PWRAP_HIPRIO_ARB_EN] =			0x54,
+	[PWRAP_HARB_STA0] =			0x58,
+	[PWRAP_HARB_STA1] =			0x5c,
+	[PWRAP_MAN_EN] =			0x60,
+	[PWRAP_MAN_CMD] =			0x64,
+	[PWRAP_MAN_RDATA] =			0x68,
+	[PWRAP_MAN_VLDCLR] =			0x6c,
+	[PWRAP_WACS0_EN] =			0x70,
+	[PWRAP_INIT_DONE0] =			0x74,
+	[PWRAP_WACS0_CMD] =			0x78,
+	[PWRAP_WACS0_RDATA] =			0x7c,
+	[PWRAP_WACS0_VLDCLR] =			0x80,
+	[PWRAP_WACS1_EN] =			0x84,
+	[PWRAP_INIT_DONE1] =			0x88,
+	[PWRAP_WACS1_CMD] =			0x8c,
+	[PWRAP_WACS1_RDATA] =			0x90,
+	[PWRAP_WACS1_VLDCLR] =			0x94,
+	[PWRAP_WACS2_EN] =			0x98,
+	[PWRAP_INIT_DONE2] =			0x9c,
+	[PWRAP_WACS2_CMD] =			0xa0,
+	[PWRAP_WACS2_RDATA] =			0xa4,
+	[PWRAP_WACS2_VLDCLR] =			0xa8,
+	[PWRAP_WACS3_EN] =			0xac,
+	[PWRAP_INIT_DONE3] =			0xb0,
+	[PWRAP_WACS3_CMD] =			0xb4,
+	[PWRAP_WACS3_RDATA] =			0xb8,
+	[PWRAP_WACS3_VLDCLR] =			0xbc,
+	[PWRAP_INT_EN] =			0xc0,
+	[PWRAP_INT_FLG_RAW] =			0xc4,
+	[PWRAP_INT_FLG] =			0xc8,
+	[PWRAP_INT_CLR] =			0xcc,
+	[PWRAP_SIG_ADR] =			0xd0,
+	[PWRAP_SIG_MODE] =			0xd4,
+	[PWRAP_SIG_VALUE] =			0xd8,
+	[PWRAP_SIG_ERRVAL] =			0xdc,
+	[PWRAP_CRC_EN] =			0xe0,
+	[PWRAP_TIMER_EN] =			0xe4,
+	[PWRAP_TIMER_STA] =			0xe8,
+	[PWRAP_WDT_UNIT] =			0xec,
+	[PWRAP_WDT_SRC_EN] =			0xf0,
+	[PWRAP_WDT_FLG] =			0xf4,
+	[PWRAP_DEBUG_INT_SEL] =			0xf8,
+	[PWRAP_DVFS_ADR0] =			0xfc,
+	[PWRAP_DVFS_WDATA0] =			0x100,
+	[PWRAP_DVFS_ADR1] =			0x104,
+	[PWRAP_DVFS_WDATA1] =			0x108,
+	[PWRAP_DVFS_ADR2] =			0x10c,
+	[PWRAP_DVFS_WDATA2] =			0x110,
+	[PWRAP_DVFS_ADR3] =			0x114,
+	[PWRAP_DVFS_WDATA3] =			0x118,
+	[PWRAP_DVFS_ADR4] =			0x11c,
+	[PWRAP_DVFS_WDATA4] =			0x120,
+	[PWRAP_DVFS_ADR5] =			0x124,
+	[PWRAP_DVFS_WDATA5] =			0x128,
+	[PWRAP_DVFS_ADR6] =			0x12c,
+	[PWRAP_DVFS_WDATA6] =			0x130,
+	[PWRAP_DVFS_ADR7] =			0x134,
+	[PWRAP_DVFS_WDATA7] =			0x138,
+	[PWRAP_DVFS_ADR8] =			0x13c,
+	[PWRAP_DVFS_WDATA8] =			0x140,
+	[PWRAP_DVFS_ADR9] =			0x144,
+	[PWRAP_DVFS_WDATA9] =			0x148,
+	[PWRAP_DVFS_ADR10] =			0x14c,
+	[PWRAP_DVFS_WDATA10] =			0x150,
+	[PWRAP_DVFS_ADR11] =			0x154,
+	[PWRAP_DVFS_WDATA11] =			0x158,
+	[PWRAP_DVFS_ADR12] =			0x15c,
+	[PWRAP_DVFS_WDATA12] =			0x160,
+	[PWRAP_DVFS_ADR13] =			0x164,
+	[PWRAP_DVFS_WDATA13] =			0x168,
+	[PWRAP_DVFS_ADR14] =			0x16c,
+	[PWRAP_DVFS_WDATA14] =			0x170,
+	[PWRAP_DVFS_ADR15] =			0x174,
+	[PWRAP_DVFS_WDATA15] =			0x178,
+	[PWRAP_SPMINF_STA] =			0x17c,
+	[PWRAP_CIPHER_KEY_SEL] =		0x180,
+	[PWRAP_CIPHER_IV_SEL] =			0x184,
+	[PWRAP_CIPHER_EN] =			0x188,
+	[PWRAP_CIPHER_RDY] =			0x18c,
+	[PWRAP_CIPHER_MODE] =			0x190,
+	[PWRAP_CIPHER_SWRST] =			0x194,
+	[PWRAP_DCM_EN] =			0x198,
+	[PWRAP_DCM_DBC_PRD] =			0x19c,
+	[PWRAP_EXT_CK] =			0x1a0,
+	[PWRAP_ADC_CMD_ADDR] =			0x1a4,
+	[PWRAP_PWRAP_ADC_CMD] =			0x1a8,
+	[PWRAP_ADC_RDATA_ADDR] =		0x1ac,
+	[PWRAP_GPS_STA] =			0x1b0,
+	[PWRAP_SW_RST] =			0x1b4,
+	[PWRAP_MD_ADC_RDATA_ADDR_LATEST] =	0x1b8,
+	[PWRAP_MD_ADC_RDATA_ADDR_WP] =		0x1bc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R0] =		0x1c0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R1] =		0x1c4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R2] =		0x1c8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R3] =		0x1cc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R4] =		0x1d0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R5] =		0x1d4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R6] =		0x1d8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R7] =		0x1dc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R8] =		0x1e0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R9] =		0x1e4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R10] =		0x1e8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R11] =		0x1ec,
+	[PWRAP_MD_ADC_RDATA_ADDR_R12] =		0x1f0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R13] =		0x1f4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R14] =		0x1f8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R15] =		0x1fc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R16] =		0x200,
+	[PWRAP_MD_ADC_RDATA_ADDR_R17] =		0x204,
+	[PWRAP_MD_ADC_RDATA_ADDR_R18] =		0x208,
+	[PWRAP_MD_ADC_RDATA_ADDR_R19] =		0x20c,
+	[PWRAP_MD_ADC_RDATA_ADDR_R20] =		0x210,
+	[PWRAP_MD_ADC_RDATA_ADDR_R21] =		0x214,
+	[PWRAP_MD_ADC_RDATA_ADDR_R22] =		0x218,
+	[PWRAP_MD_ADC_RDATA_ADDR_R23] =		0x21c,
+	[PWRAP_MD_ADC_RDATA_ADDR_R24] =		0x220,
+	[PWRAP_MD_ADC_RDATA_ADDR_R25] =		0x224,
+	[PWRAP_MD_ADC_RDATA_ADDR_R26] =		0x228,
+	[PWRAP_MD_ADC_RDATA_ADDR_R27] =		0x22c,
+	[PWRAP_MD_ADC_RDATA_ADDR_R28] =		0x230,
+	[PWRAP_MD_ADC_RDATA_ADDR_R29] =		0x234,
+	[PWRAP_MD_ADC_RDATA_ADDR_R30] =		0x238,
+	[PWRAP_MD_ADC_RDATA_ADDR_R31] =		0x23c,
+	[PWRAP_MD_ADC_STA0] =			0x240,
+	[PWRAP_MD_ADC_STA1] =			0x244,
+	[PWRAP_MD_ADC_STA2] =			0x248,
+};
+
+static const int mt6735m_regs[] = {
+	[PWRAP_MUX_SEL] =			0x0,
+	[PWRAP_WRAP_EN] =			0x4,
+	[PWRAP_DIO_EN] =			0x8,
+	[PWRAP_SIDLY] =				0xc,
+	[PWRAP_RDDMY] =				0x10,
+	[PWRAP_SI_CK_CON] =			0x14,
+	[PWRAP_CSHEXT_WRITE] =			0x18,
+	[PWRAP_CSHEXT_READ] =			0x1c,
+	[PWRAP_CSLEXT_START] =			0x20,
+	[PWRAP_CSLEXT_END] =			0x24,
+	[PWRAP_STAUPD_PRD] =			0x28,
+	[PWRAP_STAUPD_GRPEN] =			0x2c,
+	[PWRAP_EINT_STA0_ADR] =			0x30,
+	[PWRAP_EINT_STA1_ADR] =			0x34,
+	[PWRAP_STA] =				0x38,
+	[PWRAP_CLR] =				0x3c,
+	[PWRAP_STAUPD_MAN_TRIG] =		0x40,
+	[PWRAP_STAUPD_STA] =			0x44,
+	[PWRAP_WRAP_STA] =			0x48,
+	[PWRAP_HARB_INIT] =			0x4c,
+	[PWRAP_HARB_HPRIO] =			0x50,
+	[PWRAP_HIPRIO_ARB_EN] =			0x54,
+	[PWRAP_HARB_STA0] =			0x58,
+	[PWRAP_HARB_STA1] =			0x5c,
+	[PWRAP_MAN_EN] =			0x60,
+	[PWRAP_MAN_CMD] =			0x64,
+	[PWRAP_MAN_RDATA] =			0x68,
+	[PWRAP_MAN_VLDCLR] =			0x6c,
+	[PWRAP_WACS0_EN] =			0x70,
+	[PWRAP_INIT_DONE0] =			0x74,
+	[PWRAP_WACS0_CMD] =			0x78,
+	[PWRAP_WACS0_RDATA] =			0x7c,
+	[PWRAP_WACS0_VLDCLR] =			0x80,
+	[PWRAP_WACS1_EN] =			0x84,
+	[PWRAP_INIT_DONE1] =			0x88,
+	[PWRAP_WACS1_CMD] =			0x8c,
+	[PWRAP_WACS1_RDATA] =			0x90,
+	[PWRAP_WACS1_VLDCLR] =			0x94,
+	[PWRAP_WACS2_EN] =			0x98,
+	[PWRAP_INIT_DONE2] =			0x9c,
+	[PWRAP_WACS2_CMD] =			0xa0,
+	[PWRAP_WACS2_RDATA] =			0xa4,
+	[PWRAP_WACS2_VLDCLR] =			0xa8,
+	[PWRAP_INT_EN] =			0xac,
+	[PWRAP_INT_FLG_RAW] =			0xb0,
+	[PWRAP_INT_FLG] =			0xb4,
+	[PWRAP_INT_CLR] =			0xb8,
+	[PWRAP_SIG_ADR] =			0xbc,
+	[PWRAP_SIG_MODE] =			0xc0,
+	[PWRAP_SIG_VALUE] =			0xc4,
+	[PWRAP_SIG_ERRVAL] =			0xc8,
+	[PWRAP_CRC_EN] =			0xcc,
+	[PWRAP_TIMER_EN] =			0xd0,
+	[PWRAP_TIMER_STA] =			0xd4,
+	[PWRAP_WDT_UNIT] =			0xd8,
+	[PWRAP_WDT_SRC_EN] =			0xdc,
+	[PWRAP_WDT_FLG] =			0xe0,
+	[PWRAP_DEBUG_INT_SEL] =			0xe4,
+	[PWRAP_DVFS_ADR0] =			0xe8,
+	[PWRAP_DVFS_WDATA0] =			0xec,
+	[PWRAP_DVFS_ADR1] =			0xf0,
+	[PWRAP_DVFS_WDATA1] =			0xf4,
+	[PWRAP_DVFS_ADR2] =			0xf8,
+	[PWRAP_DVFS_WDATA2] =			0xfc,
+	[PWRAP_DVFS_ADR3] =			0x100,
+	[PWRAP_DVFS_WDATA3] =			0x104,
+	[PWRAP_DVFS_ADR4] =			0x108,
+	[PWRAP_DVFS_WDATA4] =			0x10c,
+	[PWRAP_DVFS_ADR5] =			0x110,
+	[PWRAP_DVFS_WDATA5] =			0x114,
+	[PWRAP_DVFS_ADR6] =			0x118,
+	[PWRAP_DVFS_WDATA6] =			0x11c,
+	[PWRAP_DVFS_ADR7] =			0x120,
+	[PWRAP_DVFS_WDATA7] =			0x124,
+	[PWRAP_DVFS_ADR8] =			0x128,
+	[PWRAP_DVFS_WDATA8] =			0x12c,
+	[PWRAP_DVFS_ADR9] =			0x130,
+	[PWRAP_DVFS_WDATA9] =			0x134,
+	[PWRAP_DVFS_ADR10] =			0x138,
+	[PWRAP_DVFS_WDATA10] =			0x13c,
+	[PWRAP_DVFS_ADR11] =			0x140,
+	[PWRAP_DVFS_WDATA11] =			0x144,
+	[PWRAP_DVFS_ADR12] =			0x148,
+	[PWRAP_DVFS_WDATA12] =			0x14c,
+	[PWRAP_DVFS_ADR13] =			0x150,
+	[PWRAP_DVFS_WDATA13] =			0x154,
+	[PWRAP_DVFS_ADR14] =			0x158,
+	[PWRAP_DVFS_WDATA14] =			0x15c,
+	[PWRAP_DVFS_ADR15] =			0x160,
+	[PWRAP_DVFS_WDATA15] =			0x164,
+	[PWRAP_SPMINF_STA] =			0x168,
+	[PWRAP_CIPHER_KEY_SEL] =		0x16c,
+	[PWRAP_CIPHER_IV_SEL] =			0x170,
+	[PWRAP_CIPHER_EN] =			0x174,
+	[PWRAP_CIPHER_RDY] =			0x178,
+	[PWRAP_CIPHER_MODE] =			0x17c,
+	[PWRAP_CIPHER_SWRST] =			0x180,
+	[PWRAP_DCM_EN] =			0x184,
+	[PWRAP_DCM_DBC_PRD] =			0x188,
+	[PWRAP_EXT_CK] =			0x18c,
+	[PWRAP_ADC_CMD_ADDR] =			0x190,
+	[PWRAP_PWRAP_ADC_CMD] =			0x194,
+	[PWRAP_ADC_RDATA_ADDR] =		0x198,
+	[PWRAP_GPS_STA] =			0x19c,
+	[PWRAP_SW_RST] =			0x1A0,
+	[PWRAP_MD_ADC_RDATA_ADDR_LATEST] =	0x1a4,
+	[PWRAP_MD_ADC_RDATA_ADDR_WP] =		0x1a8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R0] =		0x1ac,
+	[PWRAP_MD_ADC_RDATA_ADDR_R1] =		0x1b0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R2] =		0x1b4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R3] =		0x1b8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R4] =		0x1bc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R5] =		0x1c0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R6] =		0x1c4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R7] =		0x1c8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R8] =		0x1cc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R9] =		0x1d0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R10] =		0x1d4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R11] =		0x1d8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R12] =		0x1dc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R13] =		0x1e0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R14] =		0x1e4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R15] =		0x1e8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R16] =		0x1ec,
+	[PWRAP_MD_ADC_RDATA_ADDR_R17] =		0x1f0,
+	[PWRAP_MD_ADC_RDATA_ADDR_R18] =		0x1f4,
+	[PWRAP_MD_ADC_RDATA_ADDR_R19] =		0x1f8,
+	[PWRAP_MD_ADC_RDATA_ADDR_R20] =		0x1fc,
+	[PWRAP_MD_ADC_RDATA_ADDR_R21] =		0x200,
+	[PWRAP_MD_ADC_RDATA_ADDR_R22] =		0x204,
+	[PWRAP_MD_ADC_RDATA_ADDR_R23] =		0x208,
+	[PWRAP_MD_ADC_RDATA_ADDR_R24] =		0x20c,
+	[PWRAP_MD_ADC_RDATA_ADDR_R25] =		0x210,
+	[PWRAP_MD_ADC_RDATA_ADDR_R26] =		0x214,
+	[PWRAP_MD_ADC_RDATA_ADDR_R27] =		0x218,
+	[PWRAP_MD_ADC_RDATA_ADDR_R28] =		0x21c,
+	[PWRAP_MD_ADC_RDATA_ADDR_R29] =		0x220,
+	[PWRAP_MD_ADC_RDATA_ADDR_R30] =		0x224,
+	[PWRAP_MD_ADC_RDATA_ADDR_R31] =		0x228,
+	[PWRAP_MD_ADC_STA0] =			0x22c,
+	[PWRAP_MD_ADC_STA1] =			0x230,
+	[PWRAP_MD_ADC_STA2] =			0x234,
 };
 
 static const int mt6765_regs[] = {
@@ -1302,9 +1672,11 @@ static const int mt8186_regs[] = {
 
 enum pmic_type {
 	PMIC_MT6323,
+	PMIC_MT6328,
 	PMIC_MT6331,
 	PMIC_MT6332,
 	PMIC_MT6351,
+	PMIC_MT6353,
 	PMIC_MT6357,
 	PMIC_MT6358,
 	PMIC_MT6359,
@@ -1313,9 +1685,11 @@ enum pmic_type {
 };
 
 enum pwrap_type {
+	PWRAP_MT6735,
 	PWRAP_MT2701,
 	PWRAP_MT6765,
 	PWRAP_MT6779,
+	PWRAP_MT6755,
 	PWRAP_MT6795,
 	PWRAP_MT6797,
 	PWRAP_MT6873,
@@ -1732,7 +2106,17 @@ static void pwrap_init_chip_select_ext(struct pmic_wrapper *wrp, u8 hext_write,
 
 static int pwrap_common_init_reg_clock(struct pmic_wrapper *wrp)
 {
+	int ret;
+
 	switch (wrp->master->type) {
+	case PWRAP_MT6735:
+		ret = pwrap_write(wrp,
+				  wrp->slave->dew_regs[PWRAP_DEW_RDDMY_NO], 0x8);
+		if (ret)
+			return ret;
+		pwrap_writel(wrp, 0x88, PWRAP_RDDMY);
+		pwrap_init_chip_select_ext(wrp, 6, 0, 0, 0);
+		break;
 	case PWRAP_MT6795:
 		if (wrp->slave->type == PMIC_MT6331) {
 			const u32 *dew_regs = wrp->slave->dew_regs;
@@ -1746,6 +2130,19 @@ static int pwrap_common_init_reg_clock(struct pmic_wrapper *wrp)
 		}
 		pwrap_writel(wrp, 0x88, PWRAP_RDDMY);
 		pwrap_init_chip_select_ext(wrp, 15, 15, 15, 15);
+		break;
+	case PWRAP_MT6755:
+		/*
+		 * MT6755 pairs with the MT6351 (or, on MT6750, the MT6353)
+		 * slave and needs the vendor "4T PMIC" clock setup: read-dummy
+		 * of 8 cycles on both the wrapper and the PMIC DEW register,
+		 * plus a CS-high write extension of 0x33. Taken from the
+		 * MT6755 BSP pwrap_hal.c and verified with the MT6351 on m681
+		 * under Linux 7.2-rc1 (pmOS).
+		 */
+		pwrap_write(wrp, wrp->slave->dew_regs[PWRAP_DEW_RDDMY_NO], 0x8);
+		pwrap_writel(wrp, 0x8, PWRAP_RDDMY);
+		pwrap_init_chip_select_ext(wrp, 0x33, 0, 0, 0);
 		break;
 	case PWRAP_MT8173:
 		pwrap_init_chip_select_ext(wrp, 0, 4, 2, 2);
@@ -1839,8 +2236,10 @@ static int pwrap_init_cipher(struct pmic_wrapper *wrp)
 		pwrap_writel(wrp, 1, PWRAP_CIPHER_START);
 		break;
 	case PWRAP_MT2701:
+	case PWRAP_MT6735:
 	case PWRAP_MT6765:
 	case PWRAP_MT6779:
+	case PWRAP_MT6755:
 	case PWRAP_MT6795:
 	case PWRAP_MT6797:
 	case PWRAP_MT8173:
@@ -1873,7 +2272,9 @@ static int pwrap_init_cipher(struct pmic_wrapper *wrp)
 			    0x1);
 		break;
 	case PMIC_MT6323:
+	case PMIC_MT6328:
 	case PMIC_MT6351:
+	case PMIC_MT6353:
 	case PMIC_MT6357:
 		pwrap_write(wrp, wrp->slave->dew_regs[PWRAP_DEW_CIPHER_EN],
 			    0x1);
@@ -2194,6 +2595,14 @@ static const struct pwrap_slv_type pmic_mt6323 = {
 		PWRAP_SLV_CAP_SECURITY,
 };
 
+static const struct pwrap_slv_type pmic_mt6328 = {
+	.dew_regs = mt6328_regs,
+	.type = PMIC_MT6328,
+	.regops = &pwrap_regops16,
+	.caps = PWRAP_SLV_CAP_SPI | PWRAP_SLV_CAP_DUALIO |
+		PWRAP_SLV_CAP_SECURITY,
+};
+
 static const struct pwrap_slv_type pmic_mt6331 = {
 	.dew_regs = mt6331_regs,
 	.type = PMIC_MT6331,
@@ -2207,6 +2616,13 @@ static const struct pwrap_slv_type pmic_mt6331 = {
 static const struct pwrap_slv_type pmic_mt6351 = {
 	.dew_regs = mt6351_regs,
 	.type = PMIC_MT6351,
+	.regops = &pwrap_regops16,
+	.caps = 0,
+};
+
+static const struct pwrap_slv_type pmic_mt6353 = {
+	.dew_regs = mt6353_regs,
+	.type = PMIC_MT6353,
 	.regops = &pwrap_regops16,
 	.caps = 0,
 };
@@ -2249,8 +2665,10 @@ static const struct pwrap_slv_type pmic_mt6397 = {
 
 static const struct of_device_id of_slave_match_tbl[] = {
 	{ .compatible = "mediatek,mt6323", .data = &pmic_mt6323 },
+	{ .compatible = "mediatek,mt6328", .data = &pmic_mt6328 },
 	{ .compatible = "mediatek,mt6331", .data = &pmic_mt6331 },
 	{ .compatible = "mediatek,mt6351", .data = &pmic_mt6351 },
+	{ .compatible = "mediatek,mt6353", .data = &pmic_mt6353 },
 	{ .compatible = "mediatek,mt6357", .data = &pmic_mt6357 },
 	{ .compatible = "mediatek,mt6358", .data = &pmic_mt6358 },
 	{ .compatible = "mediatek,mt6359", .data = &pmic_mt6359 },
@@ -2275,6 +2693,30 @@ static const struct pmic_wrapper_type pwrap_mt2701 = {
 	.caps = PWRAP_CAP_RESET | PWRAP_CAP_DCM,
 	.init_reg_clock = pwrap_mt2701_init_reg_clock,
 	.init_soc_specific = pwrap_mt2701_init_soc_specific,
+};
+
+static const struct pmic_wrapper_type pwrap_mt6735 = {
+	.regs = mt6735_regs,
+	.type = PWRAP_MT6735,
+	.arb_en_all = GENMASK(9, 0),
+	.int_en_all = GENMASK(31, 0),
+	.spi_w = PWRAP_MAN_CMD_SPI_WRITE,
+	.wdt_src = PWRAP_WDT_SRC_MASK_ALL,
+	.caps = PWRAP_CAP_RESET | PWRAP_CAP_DCM,
+	.init_reg_clock = pwrap_common_init_reg_clock,
+	.init_soc_specific = NULL,
+};
+
+static const struct pmic_wrapper_type pwrap_mt6735m = {
+	.regs = mt6735m_regs,
+	.type = PWRAP_MT6735,
+	.arb_en_all = GENMASK(9, 0),
+	.int_en_all = GENMASK(31, 0),
+	.spi_w = PWRAP_MAN_CMD_SPI_WRITE,
+	.wdt_src = PWRAP_WDT_SRC_MASK_ALL,
+	.caps = PWRAP_CAP_RESET | PWRAP_CAP_DCM,
+	.init_reg_clock = pwrap_common_init_reg_clock,
+	.init_soc_specific = NULL,
 };
 
 static const struct pmic_wrapper_type pwrap_mt6765 = {
@@ -2313,6 +2755,26 @@ static const struct pmic_wrapper_type pwrap_mt6795 = {
 	.caps = PWRAP_CAP_RESET | PWRAP_CAP_DCM,
 	.init_reg_clock = pwrap_common_init_reg_clock,
 	.init_soc_specific = pwrap_mt6795_init_soc_specific,
+};
+
+static const struct pmic_wrapper_type pwrap_mt6755 = {
+	/*
+	 * MT6755 shares the MT6797 wrapper register layout (verified against
+	 * the MT6755 BSP pwrap_hal.h: WRAP_EN 0x4, HIPRIO_ARB_EN 0x54,
+	 * WACS2_CMD 0xa0, DCM_EN 0x1cc all match mt6797_regs). It differs
+	 * only in the reg-clock setup, handled by the PWRAP_MT6755 case in
+	 * pwrap_common_init_reg_clock().
+	 */
+	.regs = mt6797_regs,
+	.type = PWRAP_MT6755,
+	.arb_en_all = 0x01fff,
+	.int_en_all = 0xffffffc6,
+	.int1_en_all = 0,
+	.spi_w = PWRAP_MAN_CMD_SPI_WRITE,
+	.wdt_src = PWRAP_WDT_SRC_MASK_ALL,
+	.caps = PWRAP_CAP_RESET | PWRAP_CAP_DCM,
+	.init_reg_clock = pwrap_common_init_reg_clock,
+	.init_soc_specific = NULL,
 };
 
 static const struct pmic_wrapper_type pwrap_mt6797 = {
@@ -2446,9 +2908,12 @@ static const struct pmic_wrapper_type pwrap_mt8186 = {
 
 static const struct of_device_id of_pwrap_match_tbl[] = {
 	{ .compatible = "mediatek,mt2701-pwrap", .data = &pwrap_mt2701 },
+	{ .compatible = "mediatek,mt6735-pwrap", .data = &pwrap_mt6735 },
+	{ .compatible = "mediatek,mt6735m-pwrap", .data = &pwrap_mt6735m },
 	{ .compatible = "mediatek,mt6765-pwrap", .data = &pwrap_mt6765 },
 	{ .compatible = "mediatek,mt6779-pwrap", .data = &pwrap_mt6779 },
 	{ .compatible = "mediatek,mt6795-pwrap", .data = &pwrap_mt6795 },
+	{ .compatible = "mediatek,mt6755-pwrap", .data = &pwrap_mt6755 },
 	{ .compatible = "mediatek,mt6797-pwrap", .data = &pwrap_mt6797 },
 	{ .compatible = "mediatek,mt6873-pwrap", .data = &pwrap_mt6873 },
 	{ .compatible = "mediatek,mt7622-pwrap", .data = &pwrap_mt7622 },

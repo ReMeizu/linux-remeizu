@@ -62,4 +62,12 @@ config ANDROID_BINDER_ALLOC_KUNIT_TEST
 	  test-specific freelist, which allows this KUnit module to be loaded
 	  for testing without interfering with a running system.
 
+config ASHMEM
+	bool "Legacy Android ashmem shared-memory device"
+	depends on SHMEM && MMU
+	help
+	  Keep the legacy Android ashmem ioctl ABI using real shmem backing
+	  files, purgeable ranges and the kernel shrinker API. This is needed
+	  by Android 9 and vendor userspace that still opens /dev/ashmem.
+
 endmenu

@@ -14,6 +14,9 @@
 #include <linux/soc/mediatek/mtk-mmsys.h>
 
 #include "mtk-mmsys.h"
+#include "mt6735-mmsys.h"
+#include "mt6755-mmsys.h"
+#include "mt6797-mmsys.h"
 #include "mt8167-mmsys.h"
 #include "mt8173-mmsys.h"
 #include "mt8183-mmsys.h"
@@ -41,6 +44,23 @@ static const struct mtk_mmsys_driver_data mt6779_mmsys_driver_data = {
 	.clk_driver = "clk-mt6779-mm",
 };
 
+static const struct mtk_mmsys_driver_data mt6755_mmsys_driver_data = {
+	.clk_driver = "clk-mt6755-mm",
+	.routes = mt6755_mmsys_routing_table,
+	.num_routes = ARRAY_SIZE(mt6755_mmsys_routing_table),
+};
+
+/*
+ * MT6735/MT6737M: mmsys register offsets and route selectors are identical
+ * to MT8167 (vendor ddp_reg.h mt6735m/ddp_reg.h:1680-1694 and ddp_path.c).
+ * There is no UFOE in the primary path on this SoC.
+ */
+static const struct mtk_mmsys_driver_data mt6735_mmsys_driver_data = {
+	.clk_driver = "clk-mt6735-mm",
+	.routes = mt6735_mmsys_routing_table,
+	.num_routes = ARRAY_SIZE(mt6735_mmsys_routing_table),
+};
+
 static const struct mtk_mmsys_driver_data mt6795_mmsys_driver_data = {
 	.clk_driver = "clk-mt6795-mm",
 	.routes = mt8173_mmsys_routing_table,
@@ -51,6 +71,8 @@ static const struct mtk_mmsys_driver_data mt6795_mmsys_driver_data = {
 
 static const struct mtk_mmsys_driver_data mt6797_mmsys_driver_data = {
 	.clk_driver = "clk-mt6797-mm",
+	.routes = mt6797_mmsys_routing_table,
+	.num_routes = ARRAY_SIZE(mt6797_mmsys_routing_table),
 };
 
 static const struct mtk_mmsys_driver_data mt8167_mmsys_driver_data = {
@@ -459,6 +481,8 @@ static const struct of_device_id of_match_mtk_mmsys[] = {
 	{ .compatible = "mediatek,mt2701-mmsys", .data = &mt2701_mmsys_driver_data },
 	{ .compatible = "mediatek,mt2712-mmsys", .data = &mt2712_mmsys_driver_data },
 	{ .compatible = "mediatek,mt6779-mmsys", .data = &mt6779_mmsys_driver_data },
+	{ .compatible = "mediatek,mt6755-mmsys", .data = &mt6755_mmsys_driver_data },
+	{ .compatible = "mediatek,mt6735-mmsys", .data = &mt6735_mmsys_driver_data },
 	{ .compatible = "mediatek,mt6795-mmsys", .data = &mt6795_mmsys_driver_data },
 	{ .compatible = "mediatek,mt6797-mmsys", .data = &mt6797_mmsys_driver_data },
 	{ .compatible = "mediatek,mt8167-mmsys", .data = &mt8167_mmsys_driver_data },

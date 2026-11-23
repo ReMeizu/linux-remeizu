@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Meizu M6T (m1811), MediaTek MT6750
+ *
+ * Storage-only port: pwrap + MT6353 VEMC + eMMC, plus UART0.
+ *
+ * SoC identity.  The appended DTB of the stock Flyme 7.0 boot image says
+ *     model = "MT6755"; compatible = "mediatek,MT6755";
+ * (dump-analysis/unpacked/m6t.dts:4-5) -- the MT6755 family name used by
+ * every MT6750 vendor tree.  The board itself is MT6750: system/build.prop
+ * reports ro.board.platform=mt6750, ro.mediatek.platform=MT6750,
+ * chip_ver=S01, ro.product.device=MeizuM6T, ro.product.flyme.model=m1811;
+ * the boot fingerprint is Meizu/full_wt6750_66_b_n/wt6750_66_b_n:7.0 and
+ * the preloader is preloader_wt6750_66_b_n.bin (M6T_DUMP_ANALYSIS
+ * 2026-07-22 sections 1-2).
+ *
+ * M6T and M6 share the boot geometry and the whole storage/PMIC layout;
+ * only the board identity differs.
+ */
+
+/dts-v1/;
+
+#include "mt6750.dtsi"
+#include <dt-bindings/pinctrl/mt65xx.h>
+
+/ {
+	model = "Meizu M6T";
+	chassis-type = "handset";
+	compatible = "meizu,m6t", "mediatek,mt6750";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	/*
+	 * Stock DTB value (m6t.dts:281-284).  LK rewrites the memory node
+	 * from the EMI settings on every boot; no live M6T unit has been
+	 * measured, so nothing beyond the vendor value is claimed.
+	 */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x3e800000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		ram_console: ram-console@44400000 {
+			reg = <0 0x44400000 0 0x10000>;
+		};
+
+		pstore: pstore@44410000 {
+			reg = <0 0x44410000 0 0xe0000>;
+		};
+
+		minidump: minidump@444f0000 {
+			reg = <0 0x444f0000 0 0x10000>;
+		};
+
+		atf: atf@44600000 {
+			reg = <0 0x44600000 0 0x40000>;
+			no-map;
+		};
+
+		preloader: preloader@44800000 {
+			reg = <0 0x44800000 0 0x100000>;
+		};
+
+		lk: lk@46000000 {
+			reg = <0 0x46000000 0 0x400000>;
+		};
+
+		/*
+		 * Modem/connectivity reservations, sizes from the stock DTS
+		 * (m6t.dts reserve-memory-ccci_md1, reserve-memory-ccci_share,
+		 * consys-reserve-memory, spm-reserve-memory).  The modem is
+		 * not driven by this kernel, but its firmware may still be
+		 * live when Linux boots.
+		 */
+		modem-md1 {
+			size = <0 0xa100000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		modem-share {
+			size = <0 0x600000>;
+			alignment = <0 0x4000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		consys {
+			size = <0 0x100000>;
+			alignment = <0 0x200000>;
+			alloc-ranges = <0 0x40000000 0 0x60000000>;
+			no-map;
+		};
+
+		spm {
+			size = <0 0x20000>;
+			alignment = <0 0x10000>;
+			alloc-ranges = <0 0x40000000 0 0x60000000>;
+			no-map;
+		};
+	};
+};
+
+/*
+ * UART0: GPIO105 = URXD0, GPIO106 = UTXD0, function 1
+ * (mt6755-pinfunc.h).  The stock DTS uses the same pads
+ * (m6t.dts uart0_rx_set@gpio105 = 0x6901, uart0_tx_set@gpio106 = 0x6a01).
+ */
+&pio {
+	uart0_pins: uart0-pins {
+		pins {
+			pinmux = <(MTK_PIN_NO(105) | 1)>,
+				 <(MTK_PIN_NO(106) | 1)>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
+	status = "okay";
+};
+
+/*
+ * MT6353 PMIC, storage rails only.  Stock compatible is
+ * "mediatek,mt6351-pmic", "mediatek,mt6353-pmic" (m6t.dts:1723-1724);
+ * no interrupt is described, see the MT6353 note in
+ * drivers/mfd/mt6397-core.c.  VEMC 2.9-3.3 V and boot-on are the stock
+ * ldo_vemc values (m6t.dts:3894-3902).
+ */
+&pwrap {
+	status = "okay";
+
+	pmic: mt6353 {
+		compatible = "mediatek,mt6353";
+		#address-cells = <0>;
+
+		regulators {
+			mt6353_vemc: ldo-vemc {
+				regulator-name = "vemc";
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+		};
+	};
+};
+
+/*
+ * eMMC.  Stock MSDC0: bus-width 8, non-removable, vmmc-supply = VEMC
+ * (m6t.dts msdc0@11230000, vmmc-supply phandle 0x05 = ldo_vemc).  The
+ * stock node's HS200/HS400 flags are not carried over: there is no
+ * vqmmc-supply in the stock tree and no proven 1.8 V rail for mainline.
+ */
+&mmc0 {
+	vmmc-supply = <&mt6353_vemc>;
+	bus-width = <8>;
+	non-removable;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};

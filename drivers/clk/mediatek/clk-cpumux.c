@@ -44,12 +44,25 @@ static u8 clk_cpumux_get_parent(struct clk_hw *hw)
 static int clk_cpumux_set_parent(struct clk_hw *hw, u8 index)
 {
 	struct mtk_clk_cpumux *mux = to_mtk_clk_cpumux(hw);
-	u32 mask, val;
+	u32 mask, val, rb;
+	int ret;
 
 	val = index << mux->shift;
 	mask = mux->mask << mux->shift;
 
-	return regmap_update_bits(mux->regmap, mux->reg, mask, val);
+	ret = regmap_update_bits(mux->regmap, mux->reg, mask, val);
+	/*
+	 * m681 r91 DEBUG SPIN: the r86 cpufreq flight wrote a DDS into a
+	 * PLL that was seemingly still feeding the cluster — prove/disprove
+	 * that this mux write actually lands (manual MMIO of the same
+	 * register works; see BRINGUP_STATE 2026-07-10). Remove after the
+	 * cpufreq root cause is closed.
+	 */
+	regmap_read(mux->regmap, mux->reg, &rb);
+	pr_info("cpumux %s: set_parent idx=%u reg=0x%x ret=%d readback=0x%x\n",
+		clk_hw_get_name(hw), index, mux->reg, ret, rb);
+
+	return ret;
 }
 
 static const struct clk_ops clk_cpumux_ops = {

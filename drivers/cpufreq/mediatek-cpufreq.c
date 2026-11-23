@@ -691,6 +691,22 @@ static const struct mtk_cpufreq_platform_data mt2701_platform_data = {
 	.ccifreq_supported = false,
 };
 
+static const struct mtk_cpufreq_platform_data mt6755_platform_data = {
+	/*
+	 * Meizu m681 / Helio P10. Tracking window verified from the stock
+	 * BSP mt_cpufreq.c:101-105: Vsram = Vproc + 100 mV (max +200 mV),
+	 * Vsram 930..1150 mV, Vproc cap 1150 mV. Vproc is the external
+	 * MT6311 VDVFS buck shared by both clusters; Vsram is the MT6351
+	 * vsram-proc buck.
+	 */
+	.min_volt_shift = 100000,
+	.max_volt_shift = 200000,
+	.proc_max_volt = 1150000,
+	.sram_min_volt = 930000,
+	.sram_max_volt = 1150000,
+	.ccifreq_supported = false,
+};
+
 static const struct mtk_cpufreq_platform_data mt7622_platform_data = {
 	.min_volt_shift = 100000,
 	.max_volt_shift = 200000,
@@ -747,6 +763,7 @@ static const struct mtk_cpufreq_platform_data mt8516_platform_data = {
 static const struct of_device_id mtk_cpufreq_machines[] __initconst __maybe_unused = {
 	{ .compatible = "mediatek,mt2701", .data = &mt2701_platform_data },
 	{ .compatible = "mediatek,mt2712", .data = &mt2701_platform_data },
+	{ .compatible = "mediatek,mt6755", .data = &mt6755_platform_data },
 	{ .compatible = "mediatek,mt7622", .data = &mt7622_platform_data },
 	{ .compatible = "mediatek,mt7623", .data = &mt7623_platform_data },
 	{ .compatible = "mediatek,mt7988a", .data = &mt7988_platform_data },

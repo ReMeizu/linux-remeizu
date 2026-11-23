@@ -1,0 +1,257 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+#include "mt6797.dtsi"
+
+/ {
+	model = "Meizu MX6";
+	compatible = "meizu,mx6", "mediatek,mt6797";
+	chassis-type = "handset";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	/* LK must provide the actual DRAM and reserved-memory layout. */
+
+	/*
+	 * VBUS for the USB Type-C port. The stock board drives the port
+	 * through the SoC USB_DRVVBUS pin function (GPIO94 in the vendor DTS
+	 * pinctrl states "drvvbus_low"/"drvvbus_high"), not through a GPIO
+	 * owned by Linux, so the 5 V rail is modelled as a fixed supply that
+	 * the xHCI driver can request but not switch.
+	 */
+	/*
+	 * Panel rails. GPIO numbers, polarity and the 5.8 V TPS65132 output
+	 * come from the stock MX6 device tree (analysis/m95-kernel.dts):
+	 *   lcm_rst_out0/1_gpio  pin 0xb4 (180)
+	 *   lcd_bias_enp0/1_gpio pin 0xfc (252), low = off, high = on
+	 *   lcd_bias_enn0/1_gpio pin 0xfb (251), low = off, high = on
+	 *   lcd_enp/lcd_enn      0x588040 uV = 5.8 V, boot-on
+	 * VDDI18 has no GPIO or PMIC control in the stock tree (the vendor
+	 * driver only calls set_gpio_lcd_vddi18()), so it is modelled as an
+	 * always-on 1.8 V rail.
+	 */
+	/*
+	 * Backlight. The stock MX6 tree describes it as
+	 *   led@6 { compatible = "mediatek,lcd-backlight"; led_mode = <4>;
+	 *           data = <1>; pwm_config = <0 0 0 0 0>; }
+	 * which is PWM-driven backlighting on DISP_PWM channel 0. The boost
+	 * converter is lcd_bl_bias@11 on i2c0 ("mediatek,lcd_bl_bias"); there
+	 * is no mainline driver for it and the stock tree has no enable GPIO,
+	 * so it is left as the bootloader programmed it.
+	 *
+	 * Period: the stock driver programs a 1024-cycle period
+	 * (ddp_pwm.c:132 writes CON_1 = 1023) from the clock selected by
+	 * pwm_config[0] = 0, which disp_pwm_get_clkid() maps to ULPOSC_D8
+	 * ("ULPOSC 29M"), i.e. 1024 / 29 MHz = 35310 ns.
+	 */
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&disp_pwm0 0 35310>;
+		/* Policy default, not a hardware value. */
+		default-brightness-level = <128>;
+	};
+
+	vddi18: regulator-vddi18 {
+		compatible = "regulator-fixed";
+		regulator-name = "vddi";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	disp_avdd: regulator-disp-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "avdd";
+		regulator-min-microvolt = <5800000>;
+		regulator-max-microvolt = <5800000>;
+		gpio = <&pio 252 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <180>;
+		regulator-boot-on;
+	};
+
+	disp_avee: regulator-disp-avee {
+		compatible = "regulator-fixed";
+		regulator-name = "avee";
+		regulator-min-microvolt = <5800000>;
+		regulator-max-microvolt = <5800000>;
+		gpio = <&pio 251 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <180>;
+		regulator-boot-on;
+	};
+
+	vbus: regulator-usb-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-always-on;
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_mx6_pins>;
+	status = "okay";
+};
+
+&pio {
+	uart0_mx6_pins: uart0-mx6-pins {
+		pins-bus {
+			pinmux = <MT6797_GPIO97__FUNC_URXD0>,
+				 <MT6797_GPIO98__FUNC_UTXD0>;
+		};
+	};
+
+	emmc_mx6_pins: emmc-mx6-pins {
+		pins-bus {
+			pinmux = <MT6797_GPIO114__FUNC_MSDC0_DAT0>,
+				 <MT6797_GPIO115__FUNC_MSDC0_DAT1>,
+				 <MT6797_GPIO116__FUNC_MSDC0_DAT2>,
+				 <MT6797_GPIO117__FUNC_MSDC0_DAT3>,
+				 <MT6797_GPIO118__FUNC_MSDC0_DAT4>,
+				 <MT6797_GPIO119__FUNC_MSDC0_DAT5>,
+				 <MT6797_GPIO120__FUNC_MSDC0_DAT6>,
+				 <MT6797_GPIO121__FUNC_MSDC0_DAT7>,
+				 <MT6797_GPIO122__FUNC_MSDC0_CMD>,
+				 <MT6797_GPIO123__FUNC_MSDC0_CLK>,
+				 <MT6797_GPIO124__FUNC_MSDC0_DSL>,
+				 <MT6797_GPIO125__FUNC_MSDC0_RSTB>;
+		};
+	};
+};
+
+&pwrap {
+	status = "okay";
+
+	pmic: mt6351 {
+		compatible = "mediatek,mt6351";
+		interrupt-parent = <&pio>;
+		/* PMIC_EINT: virtual pin 262, which is EINT 176. */
+		interrupts = <176 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-controller;
+		#address-cells = <0>;
+		#interrupt-cells = <2>;
+
+		/* PMIC power key (PWRKEY, MT6351 interrupts 0 and 2). */
+		keys {
+			compatible = "mediatek,mt6351-keys";
+
+			key-power {
+				linux,keycodes = <KEY_POWER>;
+				wakeup-source;
+			};
+		};
+
+		rtc {
+			compatible = "mediatek,mt6351-rtc";
+		};
+
+		regulators {
+			compatible = "mediatek,mt6351-regulator";
+
+			mt6351_vemc: ldo-vemc {
+				regulator-name = "vemc";
+				regulator-always-on;
+			};
+
+			/* Fixed 3.3 V USB transceiver rail (RG_VUSB33_EN only). */
+			mt6351_vusb33: ldo-vusb33 {
+				regulator-name = "vusb33";
+				regulator-boot-on;
+			};
+		};
+	};
+};
+
+&mmc0 {
+	vmmc-supply = <&mt6351_vemc>;
+	bus-width = <8>;
+	non-removable;
+	no-sd;
+	no-sdio;
+	pinctrl-names = "default", "state_uhs";
+	pinctrl-0 = <&emmc_mx6_pins>;
+	pinctrl-1 = <&emmc_mx6_pins>;
+
+	/*
+	 * eMMC. Display (DSI0 + FT8716) and USB are wired up below.
+	 */
+	status = "okay";
+};
+
+&usb3phy {
+	status = "okay";
+};
+
+/*
+ * The stock MX6 wires the port as OTG (ID on GPIO181 via the IDDIG pin
+ * function, VBUS drive on GPIO94 via USB_DRVVBUS), but mainline has no
+ * MT6797 ID/role driver and no FUSB340 Type-C mux driver, so all that can
+ * be described is the DRD controller itself. Note that mtu3 derives the
+ * runtime role from its Kconfig choice, not from dr_mode: with the default
+ * USB_MTU3_DUAL_ROLE both host and gadget are built and the driver forces
+ * HOST mode, which is why the xHCI child is enabled below.
+ */
+&ssusb {
+	vusb33-supply = <&mt6351_vusb33>;
+	vbus-supply = <&vbus>;
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&usb_host {
+	vusb33-supply = <&mt6351_vusb33>;
+	vbus-supply = <&vbus>;
+	status = "okay";
+};
+
+&mipi_tx0 {
+	status = "okay";
+};
+
+/*
+ * FT8716 FHD panel on DSI0. The panel parameters (1080x1920, 4 lanes,
+ * burst video mode, 430 MHz DSI PLL) are documented in
+ * drivers/gpu/drm/panel/panel-fitipower-ft8716.c.
+ */
+&dsi0 {
+	status = "okay";
+
+	port {
+		dsi0_out: endpoint {
+			remote-endpoint = <&panel_in>;
+		};
+	};
+
+	panel@0 {
+		compatible = "fitipower,ft8716";
+		reg = <0>;
+
+		vddi-supply = <&vddi18>;
+		avdd-supply = <&disp_avdd>;
+		avee-supply = <&disp_avee>;
+		backlight = <&backlight>;
+		reset-gpios = <&pio 180 GPIO_ACTIVE_LOW>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
+};
+&disp_pwm0 {
+	status = "okay";
+};

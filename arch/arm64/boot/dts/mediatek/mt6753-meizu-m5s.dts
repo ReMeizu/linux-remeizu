@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Meizu M5S (M1612), MediaTek MT6753
+ *
+ * Memory map and reserved regions follow the vendor live device-tree dump
+ * (arch/arm64/boot/dts/m5s.dts in the Meizu 3.18 kernel) and the stock
+ * Flyme DTS (m5s_stock.dts).  LK rewrites the memory node from EMI
+ * settings before booting Linux, so the ranges below describe the 3 GB
+ * M1612 variant.
+ */
+
+/dts-v1/;
+
+#include "mt6753.dtsi"
+#include "mt6328.dtsi"
+
+/ {
+	model = "Meizu M5S";
+	compatible = "meizu,m5s", "mediatek,mt6753";
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x3c3c0000>,
+		      <0 0x80000000 0 0x20000000>,
+		      <0 0xa0000000 0 0x5f370000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		atf@43000000 {
+			reg = <0 0x43000000 0 0x30000>;
+			no-map;
+		};
+
+		ram-console@43f00000 {
+			reg = <0 0x43f00000 0 0x10000>;
+			no-map;
+		};
+
+		pstore@43f10000 {
+			reg = <0 0x43f10000 0 0xe0000>;
+			no-map;
+		};
+
+		minirdump@43ff0000 {
+			reg = <0 0x43ff0000 0 0x10000>;
+			no-map;
+		};
+
+		/* Vendor reservation sizes from m5s_stock.dts.  The modem is
+		 * not driven by this kernel yet, but its firmware may still be
+		 * live when Linux boots, so keep its RAM out of the allocator.
+		 */
+		modem-md1 {
+			size = <0 0x3810000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		modem-md3 {
+			size = <0 0xb00000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+
+		consys {
+			size = <0 0x100000>;
+			alignment = <0 0x200000>;
+			no-map;
+		};
+	};
+};
+
+&pio {
+	uart0_default: uart0-default-pins {
+		pins-rx-tx {
+			pinmux = <PINMUX_GPIO74__FUNC_URXD0>,
+				 <PINMUX_GPIO75__FUNC_UTXD0>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_default>;
+	status = "okay";
+};
+
+&pwrap {
+	status = "okay";
+};
+
+&mt6328_keys {
+	status = "okay";
+};
+
+&mmc0 {
+	vmmc-supply = <&mt6328_vemc33_reg>;
+	vqmmc-supply = <&mt6328_vio18_reg>;
+	bus-width = <8>;
+	max-frequency = <26000000>;
+	non-removable;
+	disable-wp;
+	no-sd;
+	no-sdio;
+	status = "okay";
+};
+
+&usb2 {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usb2phy {
+	status = "okay";
+};
