@@ -128,3 +128,51 @@
 &usb2phy {
 	status = "okay";
 };
+
+/*
+ * Mali-T720MP2 GPU (MT6753).
+ *
+ * The MT6753 is the eight-core member of the MT6735 family and uses the
+ * same GPU block: MALI@0x13040000 with SPI 212/211/210 and the mfgcfg
+ * MFG_BG3D gate at 0x13000000. Same mainline nodes as mt6735.dtsi, whose
+ * register data comes from the stock MT6735-family DTS.
+ *
+ * mfgcfg stays inert at boot; panfrost powers the MFG MTCMOS domain
+ * through its power-domains before the gate is touched.
+ */
+&mfgcfg {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
+/*
+ * MT6753 GPU DVFS profile "LV0" (600 MHz) from the stock mt_gpufreq.c
+ * (drivers/misc/mediatek/base/power/mt6735/mt_gpufreq.c:173-183,
+ * mt_gpufreq_opp_tbl_e1_0[] with GPU_DVFS_FREQ0 = 598000 kHz / 1250 mV,
+ * GPU_DVFS_FREQ1 = 448500 kHz and GPU_DVFS_FREQ2 = 299000 kHz, both at
+ * 1150 mV). VGPU has no dedicated PMIC rail on this platform (MT6328
+ * BUCK_VPROC), so no regulator is attached and devfreq only scales
+ * mfg_sel.
+ */
+&gpu_opp_table {
+	compatible = "operating-points-v2";
+	opp-shared;
+
+	opp-598000000 {
+		opp-hz = /bits/ 64 <598000000>;
+		opp-microvolt = <1250000>;
+	};
+
+	opp-448500000 {
+		opp-hz = /bits/ 64 <448500000>;
+		opp-microvolt = <1150000>;
+	};
+
+	opp-299000000 {
+		opp-hz = /bits/ 64 <299000000>;
+		opp-microvolt = <1150000>;
+	};
+};

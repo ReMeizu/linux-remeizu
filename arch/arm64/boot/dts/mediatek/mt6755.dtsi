@@ -163,6 +163,43 @@
 		compatible = "simple-bus";
 		ranges;
 
+		/*
+		 * GPU DVFS table from the stock MT6755 mt_gpufreq.c
+		 * (drivers/misc/mediatek/base/power/mt6735/mt_gpufreq.c:64-94 and
+		 * the default "HPM" table mt_gpufreq_opp_tbl_e1_0[]):
+		 *
+		 *   600 MHz   1150 mV   GPU_DVFS_FREQ0 / GPU_DVFS_VOLT0
+		 *   448.5 MHz 1050 mV   GPU_DVFS_FREQ1 / GPU_DVFS_VOLT1
+		 *   299 MHz   1050 mV   GPU_DVFS_FREQ2 / GPU_DVFS_VOLT1
+		 *
+		 * The frequency list is identical on MT6750 (same MT6755 branch of
+		 * the vendor driver). The voltage column is the vendor's Vcore
+		 * mapping; on this SoC VGPU is a separate always-on buck, so only
+		 * the frequencies drive devfreq and the rail stays where LK set it.
+		 */
+		gpu_opp_table: opp-table-gpu {
+			compatible = "operating-points-v2";
+			opp-shared;
+
+			opp-600000000 {
+				opp-hz = /bits/ 64 <600000000>;
+				opp-microvolt = <1150000>;
+				opp-microvolt-sram = <900000>;
+			};
+
+			opp-448500000 {
+				opp-hz = /bits/ 64 <448500000>;
+				opp-microvolt = <1050000>;
+				opp-microvolt-sram = <900000>;
+			};
+
+			opp-299000000 {
+				opp-hz = /bits/ 64 <299000000>;
+				opp-microvolt = <1050000>;
+				opp-microvolt-sram = <900000>;
+			};
+		};
+
 		topckgen: clock-controller@10000000 {
 			compatible = "mediatek,mt6755-topckgen", "mediatek,topckgen";
 			reg = <0 0x10000000 0 0x1000>;
@@ -295,6 +332,8 @@
 
 					mt6351_vgpu: buck-vgpu {
 						regulator-name = "vgpu";
+						regulator-min-microvolt = <1050000>;
+						regulator-max-microvolt = <1150000>;
 						regulator-always-on;
 					};
 
@@ -917,15 +956,27 @@
 		 * Mali-T860MP2 (panfrost). VERIFIED-FROM-STOCK mali@13040000:
 		 * reg 0x13040000/0x4000, JOB=SPI218 MMU=SPI217 GPU=SPI216
 		 * (all LEVEL_LOW), clock mfgsys MFG_BG3D, 700 MHz.
+		 *
+		 * Only the mfgcfg gate is listed: its parent is the composite
+		 * topckgen "mfg_sel" mux, which cannot propagate a rate from a
+		 * consumer, so devfreq retunes the GPU clock through the gate.
+		 * The GPU rail is MT6351 BUCK_VGPU, attached as "mfg-supply",
+		 * so the OPP table drives both frequency and voltage.
 		 */
-		compatible = "arm,mali-t860", "arm,mali-midgard";
+		compatible = "mediatek,mt6755-mali", "arm,mali-t860",
+			     "arm,mali-midgard";
 		reg = <0 0x13040000 0 0x4000>;
 		interrupts = <GIC_SPI 218 IRQ_TYPE_LEVEL_LOW>,
 			     <GIC_SPI 217 IRQ_TYPE_LEVEL_LOW>,
 			     <GIC_SPI 216 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-names = "job", "mmu", "gpu";
 		clocks = <&mfgcfg CLK_MFG_BG3D>;
+		clock-names = "core";
+		clock-frequency = <700000000>;
 		power-domains = <&spm MT6755_POWER_DOMAIN_MFG>;
+		operating-points-v2 = <&gpu_opp_table>;
+		mfg-supply = <&mt6351_vgpu>;
+		status = "disabled";
 	};
 
 	mutex: mutex@14014000 {

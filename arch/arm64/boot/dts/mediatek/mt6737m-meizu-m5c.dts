@@ -279,3 +279,51 @@
 &usb2phy {
 	status = "okay";
 };
+
+/*
+ * Mali-T720MP3 GPU (MT6737M).
+ *
+ * Addresses, interrupts and clock come from the stock MT6735-family DTS
+ * (kernel-m5c-4.9-lc mt6735m.dts: MFGCFG@0x13000000, MALI@0x13040000 with
+ * SPI 212/211/210 and clock-frequency 450 MHz); the 450 MHz bin is the
+ * "LV1: 450 MHz for HPM" GPU DVFS profile of the same tree
+ * (drivers/misc/mediatek/base/power/mt6735/mt_gpufreq.c:274-285,
+ * GPU_DVFS_FREQ1 = 448500 kHz / 1150 mV, GPU_DVFS_FREQ2 = 299000 kHz).
+ *
+ * VGPU is the MT6328 BUCK_VPROC output on the MT6735 platform (the PMIC
+ * has no dedicated VGPU buck), so it is not attached as an OPP regulator:
+ * devfreq only scales mfg_sel and the rail stays at the LK value.
+ *
+ * mfgcfg is enabled together with the GPU because the gate lives in the
+ * MFG MTCMOS domain; panfrost powers that domain through its
+ * power-domains before the gate is ever touched.
+ */
+&mfgcfg {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
+/*
+ * OPP table from the MT6735/MT6737M mt_gpufreq.c "HPM 450 MHz" profile
+ * (mt_gpufreq_opp_tbl_e1_1[], GPUOP(GPU_DVFS_FREQ1, GPU_DVFS_VOLT1),
+ * GPUOP(GPU_DVFS_FREQ2, GPU_DVFS_VOLT2)). The 650 MHz "LV2" /
+ * "LV4 500 MHz" bins exist only for D2+ speed-binned parts and are not
+ * assumed here.
+ */
+&gpu_opp_table {
+	compatible = "operating-points-v2";
+	opp-shared;
+
+	opp-448500000 {
+		opp-hz = /bits/ 64 <448500000>;
+		opp-microvolt = <1150000>;
+	};
+
+	opp-299000000 {
+		opp-hz = /bits/ 64 <299000000>;
+		opp-microvolt = <1050000>;
+	};
+};

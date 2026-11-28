@@ -830,3 +830,25 @@
  * verified stock reference for the next attempt; the MT6311 node
  * stays (harmless, always-on rail).
  */
+
+/*
+ * Mali-T860MP2 GPU (MT6755, M3 Note M681/L681).
+ *
+ * The SoC-level node lives in mt6755.dtsi (mali@13040000, SPI 218/217/216,
+ * mfgcfg MFG_BG3D, MFG MTCMOS). Enabling it here matches the stock kernel,
+ * where Mali is "okay" and /dev/mali is used by SurfaceFlinger, and the
+ * OPP table above (mt6755.dtsi gpu_opp_table) provides the three stock
+ * DVFS points 600 / 448.5 / 299 MHz.
+ *
+ * The stock m681 v185 notes in the vendor DTS record that enabling Mali is
+ * safe once MFG is powered at boot; here MFG is powered by panfrost's
+ * power-domains before the mfgcfg gate is written, so no boot-time MTCMOS
+ * poke happens.
+ */
+&mfgcfg {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};

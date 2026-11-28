@@ -7,6 +7,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/clock/mediatek,mt6735-clk.h>
 #include <dt-bindings/clock/mediatek,mt6735-infracfg.h>
+#include <dt-bindings/clock/mediatek,mt6735-mfgcfg.h>
 #include <dt-bindings/clock/mediatek,mt6735-pericfg.h>
 #include <dt-bindings/clock/mediatek,mt6735-topckgen.h>
 #include <dt-bindings/pinctrl/mediatek,mt6735-pinctrl.h>
@@ -105,6 +106,17 @@
 		compatible = "simple-bus";
 		ranges;
 
+		/*
+		 * GPU DVFS table. Empty by default: MT6735, MT6737M and
+		 * MT6753 have different speed bins (450 / 550 / 600 MHz),
+		 * so each board fills in the OPPs its stock BSP profile
+		 * describes (mt_gpufreq.c).
+		 */
+		gpu_opp_table: opp-table-gpu {
+			compatible = "operating-points-v2";
+			opp-shared;
+		};
+
 		infracfg: clock-controller@10000000 {
 			compatible = "mediatek,mt6735-infracfg", "syscon";
 			reg = <0 0x10000000 0 0x1000>;
@@ -173,6 +185,22 @@
 					 * the property must live on a domain
 					 * child (same layout as mt6795.dtsi).
 					 */
+					mediatek,infracfg = <&infracfg>;
+				};
+
+				/*
+				 * Mali-T720MP2 MTCMOS. Vendor:
+				 * mt_spm.h:93 SPM_MFG_PWR_CON 0x214, SPM
+				 * PWR_STATUS bit 4, SRAM PDN GENMASK(11, 8)
+				 * with ack BIT(12) (mt_spm_mtcmos.c:1585-1660,
+				 * spm_v1/mt_idle.c:725), TOPAXI MFG_S bit 14
+				 * (mt_spm.h MFG_PROT_MASK). MFG is powered
+				 * only by the GPU consumer (panfrost), never
+				 * at boot; see the gpu node below.
+				 */
+				power-domain@MT6735_POWER_DOMAIN_MFG {
+					reg = <MT6735_POWER_DOMAIN_MFG>;
+					#power-domain-cells = <0>;
 					mediatek,infracfg = <&infracfg>;
 				};
 			};
@@ -520,6 +548,57 @@
 			reg = <0 0x14000000 0 0x1000>;
 			#clock-cells = <1>;
 			power-domains = <&spm MT6735_POWER_DOMAIN_DIS>;
+			status = "disabled";
+		};
+
+		/*
+		 * Mali-T720MP2 (MT6735/MT6737M, e.g. Meizu M5c MT6737M) and
+		 * its mfgcfg clock gate.
+		 *
+		 * VERIFIED-FROM-STOCK (kernel-m5c-4.9-lc
+		 * arch/arm64/boot/dts/mediatek/mt6735m.dts):
+		 *   MFGCFG@0x13000000   reg 0x13000000/0x1000
+		 *   MALI@0x13040000     reg 0x13040000/0x4000,
+		 *     interrupts SPI 212 (JOB) / 211 (MMU) / 210 (GPU), all
+		 *     LEVEL_LOW, clock-frequency 450 MHz, core clock gated by
+		 *     mfgcfg MFG_BG3D (clk-mt6735-mfgcfg.c, bit 0, parent
+		 *     mfg_sel), powered by the SPM MFG MTCMOS domain. The
+		 *     gate's "mfg_sel" parent is a composite mux, so it is
+		 *     not listed as a second (rate-propagating) clock here:
+		 *     the OPP rate changes land on the gate itself.
+		 *
+		 * MT6735/MT6737M have no SMI MMU (vendor uses SMI without
+		 * M4U on this generation), so no iommus property here.
+		 */
+		mfgcfg: clock-controller@13000000 {
+			compatible = "mediatek,mt6735-mfgcfg";
+			reg = <0 0x13000000 0 0x1000>;
+			#clock-cells = <1>;
+			#reset-cells = <1>;
+			/*
+			 * Registered without power-domains on purpose:
+			 * mtk_clk_simple_probe() would otherwise power the MFG
+			 * MTCMOS domain on and off at boot (need_runtime_pm),
+			 * which is a known boot hazard on this family. The
+			 * MFG domain is instead brought up by the GPU consumer
+			 * (panfrost -> power-domains MFG) before it enables
+			 * BG3D, exactly like clk-mt6755-mfg.c explains.
+			 */
+			status = "disabled";
+		};
+
+		gpu: gpu@13040000 {
+			compatible = "mediatek,mt6735-mali", "arm,mali-t720",
+			     "arm,mali-midgard";
+			reg = <0 0x13040000 0 0x4000>;
+			interrupts = <GIC_SPI 212 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 211 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 210 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "job", "mmu", "gpu";
+			clocks = <&mfgcfg CLK_MFG_BG3D>;
+			clock-names = "core";
+			power-domains = <&spm MT6735_POWER_DOMAIN_MFG>;
+			operating-points-v2 = <&gpu_opp_table>;
 			status = "disabled";
 		};
 
