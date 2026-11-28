@@ -175,6 +175,12 @@ static const struct mfd_cell mt6328_devs[] = {
 		.num_resources = ARRAY_SIZE(mt6328_keys_resources),
 		.resources = mt6328_keys_resources,
 		.of_compatible = "mediatek,mt6328-keys"
+	}, {
+		.name = "mt6328-auxadc",
+		.of_compatible = "mediatek,mt6328-auxadc",
+	}, {
+		.name = "mtk-pmic-charger",
+		.of_compatible = "mediatek,mt6328-charger",
 	},
 };
 
@@ -191,6 +197,16 @@ static const struct mfd_cell mt6351_devs[] = {
 		.num_resources = ARRAY_SIZE(mt6351_keys_resources),
 		.resources = mt6351_keys_resources,
 		.of_compatible = "mediatek,mt6351-keys",
+	}, {
+		/*
+		 * The AUXADC of the MT6351 is driven by mt6359-auxadc.c through
+		 * its MT6351 variant (16 bit registers, PMIC AUXADC helper).
+		 */
+		.name = "mt6359-auxadc",
+		.of_compatible = "mediatek,mt6351-auxadc",
+	}, {
+		.name = "mtk-pmic-charger",
+		.of_compatible = "mediatek,mt6351-charger",
 	},
 };
 
@@ -202,6 +218,14 @@ static const struct mfd_cell mt6351_devs[] = {
  */
 static const struct mfd_cell mt6353_devs[] = {
 	{ .name = "mt6353-regulator" },
+	{
+		.name = "mt6359-auxadc",
+		.of_compatible = "mediatek,mt6353-auxadc",
+	},
+	{
+		.name = "mtk-pmic-charger",
+		.of_compatible = "mediatek,mt6353-charger",
+	},
 };
 
 static const struct mfd_cell mt6357_devs[] = {

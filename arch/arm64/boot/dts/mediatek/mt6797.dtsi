@@ -822,4 +822,66 @@
 		      <0 0x19200000 0 0x200000>,   /* GICR */
 		      <0 0x10240000 0 0x2000>;     /* GICC */
 	};
+
+	efuse: efuse@10206000 {
+		compatible = "mediatek,mt8173-efuse", "mediatek,efuse";
+		reg = <0 0x10206000 0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		thermal_calibration: calib@180 {
+			reg = <0x180 0xc>;
+		};
+	};
+
+	auxadc: adc@11001000 {
+		compatible = "mediatek,mt6797-auxadc";
+		reg = <0 0x11001000 0 0x1000>;
+		clocks = <&infrasys CLK_INFRA_AUXADC>;
+		clock-names = "main";
+		#io-channel-cells = <1>;
+	};
+
+	thermal: thermal@1100b000 {
+		compatible = "mediatek,mt6797-thermal";
+		reg = <0 0x1100b000 0 0x1000>;
+		interrupts = <GIC_SPI 78 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&infrasys CLK_INFRA_THERM>,
+			 <&infrasys CLK_INFRA_AUXADC>;
+		clock-names = "therm", "auxadc";
+		mediatek,auxadc = <&auxadc>;
+		mediatek,apmixedsys = <&apmixedsys>;
+		nvmem-cells = <&thermal_calibration>;
+		nvmem-cell-names = "calibration-data";
+		#thermal-sensor-cells = <0>;
+	};
+
+	thermal-zones {
+		cpu_thermal: cpu-thermal {
+			polling-delay-passive = <1000>;
+			polling-delay = <1000>;
+			thermal-sensors = <&thermal>;
+			sustainable-power = <2500>;
+
+			trips {
+				cpu_passive: trip-point0 {
+					temperature = <80000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				cpu_hot: trip-point1 {
+					temperature = <85000>;
+					hysteresis = <2000>;
+					type = "hot";
+				};
+
+				cpu_crit: trip-point2 {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+		};
+	};
 };

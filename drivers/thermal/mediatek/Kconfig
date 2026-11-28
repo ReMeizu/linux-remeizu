@@ -12,6 +12,7 @@ if MTK_THERMAL
 config MTK_SOC_THERMAL
 	tristate "AUXADC temperature sensor driver for MediaTek SoCs"
 	depends on HAS_IOMEM
+	select MEDIATEK_PMIC_AUXADC if MFD_MT6397
 	help
 	  Enable this option if you want to get SoC temperature
 	  information for MediaTek platforms.

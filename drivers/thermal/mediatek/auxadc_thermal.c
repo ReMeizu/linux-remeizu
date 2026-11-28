@@ -182,6 +182,8 @@ enum mtk_thermal_version {
 	MTK_THERMAL_V1 = 1,
 	MTK_THERMAL_V2,
 	MTK_THERMAL_V3,
+	/* Head-swap TMU of MT6735/MT6755/MT6797 (MediaTek 3.18/4.9 BSP) */
+	MTK_THERMAL_V4,
 };
 
 /* MT2701 thermal sensors */
@@ -296,6 +298,55 @@ enum mtk_thermal_version {
 #define MT8365_TS2 1
 #define MT8365_TS3 2
 
+/*
+ * MT6797 (Helio X20) thermal sensors.
+ *
+ * The MT6797 TMU runs one controller per bank, selected through PTPCORESEL.
+ * The MediaTek 3.18 BSP (thermal/mt6797/src/mtk_tc.c, tscpu_g_bank) maps:
+ *
+ *   bank 0: MCU1 (big CPU)            bank 3: MCU2 (CPU-L)
+ *   bank 1: MCU4 (GPU)                bank 4: MCU2 (CPU-LL)
+ *   bank 2: MCU2 + MCU3 (SoC)         bank 5: MCU2 (MCUCCI)
+ *
+ * The BSP efuse layout is the MT6755 one and the conversion is the BSP
+ * raw_to_temperature_roomt(), handled by MTK_THERMAL_V4.
+ */
+#define MT6797_TEMP_AUXADC_CHANNEL	11
+#define MT6797_CALIBRATION		165
+#define MT6797_NUM_CONTROLLER		6
+#define MT6797_NUM_SENSORS		4
+#define MT6797_SENSOR_MCU1		0
+#define MT6797_SENSOR_MCU2		1
+#define MT6797_SENSOR_MCU3		2
+#define MT6797_SENSOR_MCU4		3
+
+/*
+ * MT6735 / MT6737M thermal sensors.
+ *
+ * The head-swap TMU of the MT6735 family has three sensing points, all
+ * converted through AUXADC channel 11 (TSX). A bank can sample up to three
+ * points at a time under one of four input mux settings; the MediaTek 4.9 BSP
+ * (drivers/misc/mediatek/thermal/mt6735/src/mtk_tc_D1.c,
+ * tscpu_thermal_hw_init) uses:
+ *
+ *   bank 0: MCU4          (mux 3)  - AP/PLL/GPU area
+ *   bank 1: MCU1, MCU3, MCU2       - CPU area, MCU2 selected as CPU
+ *
+ * Calibration efuse (mt_thermal_def.h, EFUSE_TS_CPU_INDEX0/1/2):
+ *   TS_CPU0 != 0: 0x10206180[7:0]  O_SLOPE_SIGN    [31:26] O_SLOPE
+ *                 0x10206184[4:0]  DEGC_CALI       [9]     ID
+ *                 0x10206188[8:0]  VTS1     [17:9] VTS2  [26:18] VTS3
+ *   TS_CPU0 == 0: 0x10206188[9:0]  ADC_GE   [19:10] ADC_OE
+ */
+#define MT6735_TEMP_AUXADC_CHANNEL	11
+#define MT6735_CALIBRATION		165
+#define MT6735_NUM_CONTROLLER		1
+#define MT6735_NUM_SENSORS		4
+#define MT6735_SENSOR_MCU1		0
+#define MT6735_SENSOR_MCU2		1
+#define MT6735_SENSOR_MCU3		2
+#define MT6735_SENSOR_MCU4		3
+
 struct mtk_thermal;
 
 struct thermal_bank_cfg {
@@ -325,6 +376,14 @@ struct mtk_thermal_data {
 	u32 apmixed_buffer_ctl_reg;
 	u32 apmixed_buffer_ctl_mask;
 	u32 apmixed_buffer_ctl_set;
+	/*
+	 * The head-swap TMUs of MT6735/MT6755/MT6797 do not drive a mux in
+	 * APMIXEDSYS: TEMP_PNPMUXADDR is pointed at the TEMPPNPMUXADDR
+	 * register itself (an AHB address inside the controller), so the
+	 * sensing point written to TEMP_ADCPNPn is copied by the hardware
+	 * into the mux register without any CPU traffic.
+	 */
+	bool apmixed_forced;
 };
 
 struct mtk_thermal {
@@ -346,6 +405,12 @@ struct mtk_thermal {
 
 	const struct mtk_thermal_data *conf;
 	struct mtk_thermal_bank banks[MAX_NUM_ZONES];
+	/*
+	 * The head-swap TMUs sample through the PMIC AUXADC channel 11 and
+	 * only need the block out of power down, which is done by the PMIC
+	 * AUXADC helper instead of local AUXADC MMIO.
+	 */
+	struct mediatek_pmic_auxadc *pmic_adc;
 
 	int (*raw_to_mcelsius)(struct mtk_thermal *mt, int sensno, s32 raw);
 };
@@ -695,6 +760,154 @@ static const struct mtk_thermal_data mt7986_thermal_data = {
 	.apmixed_buffer_ctl_set = BIT(0),
 };
 
+/*
+ * MT6735/MT6737M: both banks use AUXADC channel 11 through the head-swap
+ * controller. Bank 1 measures the three CPU sensing points at once.
+ */
+static const int mt6735_bank_data[2][3] = {
+	{ MT6735_SENSOR_MCU4 },
+	{ MT6735_SENSOR_MCU1, MT6735_SENSOR_MCU3, MT6735_SENSOR_MCU2 },
+};
+
+static const int mt6735_msr[3] = {
+	TEMP_MSR0, TEMP_MSR1, TEMP_MSR2
+};
+
+static const int mt6735_adcpnp[3] = {
+	TEMP_ADCPNP0, TEMP_ADCPNP1, TEMP_ADCPNP2
+};
+
+static const int mt6735_mux_values[MT6735_NUM_SENSORS] = { 0, 1, 2, 3 };
+static const int mt6735_tc_offset[MT6735_NUM_CONTROLLER] = { 0x0 };
+static const int mt6735_vts_index[MT6735_NUM_SENSORS] = {
+	VTS1, VTS2, VTS3, VTS4
+};
+
+static const struct mtk_thermal_data mt6735_thermal_data = {
+	.auxadc_channel = MT6735_TEMP_AUXADC_CHANNEL,
+	.num_banks = 2,
+	.num_sensors = MT6735_NUM_SENSORS,
+	.vts_index = mt6735_vts_index,
+	.cali_val = MT6735_CALIBRATION,
+	.num_controller = MT6735_NUM_CONTROLLER,
+	.controller_offset = mt6735_tc_offset,
+	.need_switch_bank = true,
+	.bank_data = {
+		{
+			.num_sensors = 1,
+			.sensors = mt6735_bank_data[0],
+		}, {
+			.num_sensors = 3,
+			.sensors = mt6735_bank_data[1],
+		},
+	},
+	.msr = mt6735_msr,
+	.adcpnp = mt6735_adcpnp,
+	.sensor_mux_values = mt6735_mux_values,
+	.version = MTK_THERMAL_V4,
+	.apmixed_forced = true,
+};
+
+/*
+ * MT6755/MT6750: the BSP tscpu_g_bank table is
+ *	bank 0: MCU4, bank 1: MCU1+MCU3+MCU2, bank 2: MCU4,
+ * i.e. the same sensing points as the MT6735. The MT6755 efuse layout is the
+ * MT6351/MT6328 AUXADC calibration (0x10206180..0x10206188).
+ */
+static const struct mtk_thermal_data mt6755_thermal_data = {
+	.auxadc_channel = MT6735_TEMP_AUXADC_CHANNEL,
+	.num_banks = 3,
+	.num_sensors = MT6735_NUM_SENSORS,
+	.vts_index = mt6735_vts_index,
+	.cali_val = MT6735_CALIBRATION,
+	.num_controller = MT6735_NUM_CONTROLLER,
+	.controller_offset = mt6735_tc_offset,
+	.need_switch_bank = true,
+	.bank_data = {
+		{
+			.num_sensors = 1,
+			.sensors = mt6735_bank_data[0],
+		}, {
+			.num_sensors = 3,
+			.sensors = mt6735_bank_data[1],
+		}, {
+			.num_sensors = 1,
+			.sensors = mt6735_bank_data[0],
+		},
+	},
+	.msr = mt6735_msr,
+	.adcpnp = mt6735_adcpnp,
+	.sensor_mux_values = mt6735_mux_values,
+	.version = MTK_THERMAL_V4,
+	.apmixed_forced = true,
+};
+
+/*
+ * MT6797: one controller per bank (PTPCORESEL), MT6755 efuse layout and the
+ * MT6797 O_SLOPE scaling.
+ */
+static const int mt6797_bank_data[6][2] = {
+	{ MT6797_SENSOR_MCU1 },
+	{ MT6797_SENSOR_MCU4 },
+	{ MT6797_SENSOR_MCU2, MT6797_SENSOR_MCU3 },
+	{ MT6797_SENSOR_MCU2 },
+	{ MT6797_SENSOR_MCU2 },
+	{ MT6797_SENSOR_MCU2 },
+};
+
+static const int mt6797_msr[3] = {
+	TEMP_MSR0, TEMP_MSR1, TEMP_MSR2
+};
+
+static const int mt6797_adcpnp[3] = {
+	TEMP_ADCPNP0, TEMP_ADCPNP1, TEMP_ADCPNP2
+};
+
+static const int mt6797_mux_values[MT6797_NUM_SENSORS] = { 0, 1, 2, 3 };
+static const int mt6797_tc_offset[MT6797_NUM_CONTROLLER] = {
+	0x0, 0x100, 0x200, 0x300, 0x400, 0x500
+};
+static const int mt6797_vts_index[MT6797_NUM_SENSORS] = {
+	VTS1, VTS2, VTS3, VTS4
+};
+
+static const struct mtk_thermal_data mt6797_thermal_data = {
+	.auxadc_channel = MT6797_TEMP_AUXADC_CHANNEL,
+	.num_banks = 6,
+	.num_sensors = MT6797_NUM_SENSORS,
+	.vts_index = mt6797_vts_index,
+	.cali_val = MT6797_CALIBRATION,
+	.num_controller = MT6797_NUM_CONTROLLER,
+	.controller_offset = mt6797_tc_offset,
+	.need_switch_bank = true,
+	.bank_data = {
+		{
+			.num_sensors = 1,
+			.sensors = mt6797_bank_data[0],
+		}, {
+			.num_sensors = 1,
+			.sensors = mt6797_bank_data[1],
+		}, {
+			.num_sensors = 2,
+			.sensors = mt6797_bank_data[2],
+		}, {
+			.num_sensors = 1,
+			.sensors = mt6797_bank_data[3],
+		}, {
+			.num_sensors = 1,
+			.sensors = mt6797_bank_data[4],
+		}, {
+			.num_sensors = 1,
+			.sensors = mt6797_bank_data[5],
+		},
+	},
+	.msr = mt6797_msr,
+	.adcpnp = mt6797_adcpnp,
+	.sensor_mux_values = mt6797_mux_values,
+	.version = MTK_THERMAL_V4,
+	.apmixed_forced = true,
+};
+
 static bool mtk_thermal_temp_is_valid(int temp)
 {
 	return (temp >= MT8173_TEMP_MIN) && (temp <= MT8173_TEMP_MAX);
@@ -768,6 +981,65 @@ static int raw_to_mcelsius_v3(struct mtk_thermal *mt, int sensno, s32 raw)
 	tmp *= raw - mt->vts[sensno] - 2900;
 
 	return mt->degc_cali * 500 - tmp;
+}
+
+/**
+ * raw_to_mcelsius_v4 - convert a raw head-swap TMU value to mcelsius
+ * @mt:		The thermal controller
+ * @sensno:	sensor number
+ * @raw:	raw ADC value (MT6735/MT6755/MT6797 head-swap TMU)
+ *
+ * This is the MediaTek BSP formula (mtk_tc.c, raw_to_temperature_roomt):
+ *
+ *	format_1 = DEGC_cali * 10 / 2
+ *	format_2 = raw - ADC_OE
+ *	format_3 = ((format_2 * 10000 >> 12) * 10000 / gain - x_roomt) * 15 / 18
+ *	format_4 = format_3 * 100 / (165 + O_SLOPE)     (0.1 degC units)
+ *	fmt_4   -= format_4 * 2                         (the slope is negative)
+ *	T	 = format_1 + format_4
+ *
+ * The BSP keeps x_roomt (the raw value of the sensor at room temperature) in
+ * the same fixed point representation, so it is derived from the VTS fuse of
+ * each sensing point here.
+ */
+static int raw_to_mcelsius_v4(struct mtk_thermal *mt, int sensno, s32 raw)
+{
+	s32 format_2, format_3, format_4;
+	s32 x_roomt;
+	s32 tmp;
+
+	if (raw == 0)
+		return 0;
+
+	raw &= 0xfff;
+
+	format_2 = raw - mt->adc_oe;
+
+	/* x_roomt * 10^8 for this sensing point */
+	tmp = mt->vts[sensno] + 3350 - mt->adc_oe;
+	x_roomt = ((tmp * 10000) / 4096) * 10000 / (10000 + mt->adc_ge);
+
+	/* 10^8 fixed point, shifted like the BSP (x10000 >> 12) twice */
+	format_3 = (((format_2 * 10000) >> 12) * 10000) / (10000 + mt->adc_ge) -
+		   x_roomt;
+	format_3 = format_3 * 15 / 18;
+
+	/*
+	 * The MT6797 BSP scales O_SLOPE by 10 and its divider (1663) already
+	 * carries the factor, so the same fixed point arithmetic applies.
+	 */
+	if (mt->o_slope_sign)
+		format_4 = format_3 * 100 / (165 - mt->o_slope);
+	else
+		format_4 = format_3 * 100 / (165 + mt->o_slope);
+
+	/* The denominator is a temperature increase, i.e. a negative slope */
+	format_4 = -format_4;
+
+	/* format_1 + format_4, in 0.1 degC */
+	tmp = mt->degc_cali * 10 / 2 + format_4;
+
+	return tmp * 100;
 }
 
 /**
@@ -870,7 +1142,39 @@ static const struct thermal_zone_device_ops mtk_thermal_ops = {
 	.get_temp = mtk_read_temp,
 };
 
+/**
+ * mtk_thermal_write_sensor_mux - select a sensing point for a bank slot
+ * @mt:		the thermal controller
+ * @controller_base: TMU controller base
+ * @apmixed_base: APMIXEDSYS base, only used by the head-swap TMUs
+ * @slot:	ADC input slot of the bank
+ * @sensor:	sensor index
+ *
+ * The head-swap TMU programs APMIXEDSYS TS_CON1 ([5:4] = sensing point group,
+ * [2:0] = index) and lets its AHB state machine copy the value to
+ * TEMP_ADCPNPn through TEMP_PNPMUXADDR; the newer TMUs simply take the mux
+ * value written into TEMP_ADCPNPn.
+ */
+static void mtk_thermal_write_sensor_mux(struct mtk_thermal *mt,
+					 void __iomem *controller_base,
+					 void __iomem *apmixed_base,
+					 int slot, int sensor)
+{
+	const struct mtk_thermal_data *conf = mt->conf;
+	u32 mux = conf->sensor_mux_values[sensor];
+
+	if (!conf->apmixed_forced) {
+		writel(mux, mt->thermal_base + conf->adcpnp[slot]);
+		return;
+	}
+
+	/* TS_CON1 = sensing point index, sensors 1..2 share the same group */
+	writel(mux, controller_base + TEMP_ADCMUX);
+	writeb(mux, apmixed_base + APMIXED_SYS_TS_CON1 + 3);
+}
+
 static void mtk_thermal_init_bank(struct mtk_thermal *mt, int num,
+				  void __iomem *apmixed_base_io,
 				  u32 apmixed_phys_base, u32 auxadc_phys_base,
 				  int ctrl_id)
 {
@@ -930,7 +1234,8 @@ static void mtk_thermal_init_bank(struct mtk_thermal *mt, int num,
 	writel(auxadc_phys_base + AUXADC_CON1_CLR_V,
 	       controller_base + TEMP_ADCMUXADDR);
 
-	if (mt->conf->version == MTK_THERMAL_V1) {
+	if (mt->conf->version == MTK_THERMAL_V1 ||
+	    mt->conf->apmixed_forced) {
 		/* AHB address for pnp sensor mux selection */
 		writel(apmixed_phys_base + APMIXED_SYS_TS_CON1,
 		       controller_base + TEMP_PNPMUXADDR);
@@ -966,8 +1271,9 @@ static void mtk_thermal_init_bank(struct mtk_thermal *mt, int num,
 		controller_base + TEMP_ADCWRITECTRL);
 
 	for (i = 0; i < conf->bank_data[num].num_sensors; i++)
-		writel(conf->sensor_mux_values[conf->bank_data[num].sensors[i]],
-		       mt->thermal_base + conf->adcpnp[i]);
+		mtk_thermal_write_sensor_mux(mt, controller_base,
+					     apmixed_base_io,
+					     i, conf->bank_data[num].sensors[i]);
 
 	writel((1 << conf->bank_data[num].num_sensors) - 1,
 	       controller_base + TEMP_MONCTL0);
@@ -1070,6 +1376,64 @@ static int mtk_thermal_extract_efuse_v3(struct mtk_thermal *mt, u32 *buf)
 	return 0;
 }
 
+/**
+ * mtk_thermal_extract_efuse_v4 - parse the head-swap TMU calibration
+ * @mt:		the thermal controller
+ * @buf:	efuse words (0x10206180, 0x10206184, 0x10206188)
+ *
+ * This is the MediaTek BSP layout (mt_thermal_def.h):
+ *
+ *   TS_CPU0 != 0: buf0[7:0] = O_SLOPE_SIGN, buf0[31:26] = O_SLOPE,
+ *		   buf1[4:0] = DEGC_CALI, buf1[9] = ID,
+ *		   buf2[8:0] = VTS1, buf2[17:9] = VTS2, buf2[26:18] = VTS3
+ *   TS_CPU0 == 0: buf2[15:0] = not used, buf2[29:20] = ADC_GE,
+ *		   buf2[9:0] = ADC_OE
+ *
+ * The BSP picks the second layout when the efuse word at 0x10206188 looks
+ * like an ADC offset (i.e. the calibration enable bit is clear); such a word
+ * is reported with ADC_OE in the low ten bits.
+ */
+static int mtk_thermal_extract_efuse_v4(struct mtk_thermal *mt, u32 *buf)
+{
+	u32 ts_cpu0 = buf[2];
+	bool cali_en;
+
+	/*
+	 * TS_CPU0 (the VTS calibration of the first sensing point) lives in
+	 * bits [8:0] of the third word; when the calibration is disabled the
+	 * whole word holds ADC_GE/ADC_OE instead.
+	 */
+	cali_en = !!(ts_cpu0 & GENMASK(8, 0));
+
+	mt->vts[VTS1] = 260;
+	mt->vts[VTS2] = 260;
+	mt->vts[VTS3] = 260;
+	mt->vts[VTS4] = 260;
+
+	if (cali_en) {
+		mt->o_slope_sign = buf[0] & GENMASK(7, 0);
+		mt->o_slope = (buf[0] >> 26) & GENMASK(5, 0);
+		mt->degc_cali = buf[1] & GENMASK(4, 0);
+
+		/* ID = 0 means a TSMC sample: O_SLOPE is not valid */
+		if (!(buf[1] & BIT(9)))
+			mt->o_slope = 0;
+
+		mt->vts[VTS1] = ts_cpu0 & GENMASK(8, 0);
+		mt->vts[VTS2] = (buf[2] >> 9) & GENMASK(8, 0);
+		mt->vts[VTS3] = (buf[2] >> 18) & GENMASK(8, 0);
+		mt->vts[VTS4] = mt->vts[VTS3];
+
+		mt->adc_ge = 512;
+		mt->adc_oe = 512;
+	} else {
+		mt->adc_ge = (buf[2] >> 20) & GENMASK(9, 0);
+		mt->adc_oe = buf[2] & GENMASK(9, 0);
+	}
+
+	return 0;
+}
+
 static int mtk_thermal_get_calibration_data(struct device *dev,
 					    struct mtk_thermal *mt)
 {
@@ -1116,6 +1480,9 @@ static int mtk_thermal_get_calibration_data(struct device *dev,
 	case MTK_THERMAL_V3:
 		ret = mtk_thermal_extract_efuse_v3(mt, buf);
 		break;
+	case MTK_THERMAL_V4:
+		ret = mtk_thermal_extract_efuse_v4(mt, buf);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1161,7 +1528,16 @@ static const struct of_device_id mtk_thermal_of_match[] = {
 		.compatible = "mediatek,mt8365-thermal",
 		.data = (void *)&mt8365_thermal_data,
 	}, {
+		.compatible = "mediatek,mt6735-thermal",
+		.data = (void *)&mt6735_thermal_data,
+	}, {
+		.compatible = "mediatek,mt6755-thermal",
+		.data = (void *)&mt6755_thermal_data,
+	}, {
+		.compatible = "mediatek,mt6797-thermal",
+		.data = (void *)&mt6797_thermal_data,
 	},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, mtk_thermal_of_match);
 
@@ -1254,7 +1630,12 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	mt->clk_auxadc = devm_clk_get_enabled(&pdev->dev, "auxadc");
+	/*
+	 * The older SoCs (MT6735/MT6755/MT6797) have no separate AUXADC clock
+	 * for the TMU: they only gate the thermal controller through the
+	 * "therm" (INFRA_THERM) gate, so the auxadc clock is optional there.
+	 */
+	mt->clk_auxadc = devm_clk_get_optional_enabled(&pdev->dev, "auxadc");
 	if (IS_ERR(mt->clk_auxadc)) {
 		ret = PTR_ERR(mt->clk_auxadc);
 		dev_err(&pdev->dev, "Can't enable auxadc clk: %d\n", ret);
@@ -1277,12 +1658,15 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v1;
 	else if (mt->conf->version == MTK_THERMAL_V2)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v2;
-	else
+	else if (mt->conf->version == MTK_THERMAL_V3)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v3;
+	else
+		mt->raw_to_mcelsius = raw_to_mcelsius_v4;
 
 	for (ctrl_id = 0; ctrl_id < mt->conf->num_controller ; ctrl_id++)
 		for (i = 0; i < mt->conf->num_banks; i++)
-			mtk_thermal_init_bank(mt, i, apmixed_phys_base,
+			mtk_thermal_init_bank(mt, i, apmixed_base,
+					      apmixed_phys_base,
 					      auxadc_phys_base, ctrl_id);
 
 	tzdev = devm_thermal_of_zone_register(&pdev->dev, 0, mt,
