@@ -133,3 +133,37 @@
 	no-sdio;
 	status = "okay";
 };
+
+/*
+ * Mali-T720MP2 GPU (MT6753), same block as the M5S: mali@13040000 with
+ * SPI 212/211/210 and the mfgcfg MFG_BG3D gate, powered by the MFG
+ * MTCMOS domain. See mt6753-meizu-m5s.dts for the stock-tree sources.
+ */
+&mfgcfg {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
+/* MT6753 GPU DVFS profile "LV0": 598 / 448.5 / 299 MHz. */
+&gpu_opp_table {
+	compatible = "operating-points-v2";
+	opp-shared;
+
+	opp-598000000 {
+		opp-hz = /bits/ 64 <598000000>;
+		opp-microvolt = <1250000>;
+	};
+
+	opp-448500000 {
+		opp-hz = /bits/ 64 <448500000>;
+		opp-microvolt = <1150000>;
+	};
+
+	opp-299000000 {
+		opp-hz = /bits/ 64 <299000000>;
+		opp-microvolt = <1150000>;
+	};
+};

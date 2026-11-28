@@ -21,6 +21,7 @@
 
 #include "panfrost_device.h"
 #include "panfrost_gem.h"
+#include "panfrost_regs.h"
 #include "panfrost_mmu.h"
 #include "panfrost_job.h"
 #include "panfrost_gpu.h"
@@ -868,6 +869,38 @@ static const struct panfrost_compatible amlogic_data = {
 	.vendor_quirk = panfrost_gpu_amlogic_quirk,
 };
 
+/*
+ * Older MediaTek Midgard SoCs (MT6735/MT6737M/MT6753 Mali-T720,
+ * MT6750/MT6755 Mali-T860, MT6797 Mali-T880) run the GPU as a
+ * non-coherent device: they have no ACE/ACE_LITE master, and their SMC
+ * (the data path the GPU uses to read/write memory through the SMI) is
+ * not coherent with the CPU L2. Panfrost has to be told so explicitly,
+ * exactly like the vendor driver which hard-codes the same override,
+ * otherwise texture and job-descriptor reads return stale lines and the
+ * first job hangs.
+ *
+ * They are also wired to a single "mfg" genpd (the MTCMOS MT6797 style
+ * chain MFG_ASYNC -> MFG -> MFG_CORE0..3 hides below it), so the default
+ * one optional power domain applies.
+ */
+static void panfrost_gpu_mediatek_quirk(struct panfrost_device *pfdev)
+{
+	u32 quirks = gpu_read(pfdev, GPU_JM_CONFIG);
+
+	quirks |= (COHERENCY_ACE_LITE | COHERENCY_ACE) <<
+		  JM_FORCE_COHERENCY_FEATURES_SHIFT;
+
+	gpu_write(pfdev, GPU_JM_CONFIG, quirks);
+}
+
+static const struct panfrost_compatible mediatek_midgard_data = {
+	.num_supplies = ARRAY_SIZE(default_supplies) - 1,
+	.supply_names = default_supplies,
+	.num_pm_domains = 1, /* optional */
+	.pm_domain_names = NULL,
+	.vendor_quirk = panfrost_gpu_mediatek_quirk,
+};
+
 static const char * const mediatek_pm_domains[] = { "core0", "core1", "core2",
 						    "core3", "core4" };
 /*
@@ -935,6 +968,16 @@ static const struct of_device_id dt_match[] = {
 	  .data = &amlogic_data, },
 	{ .compatible = "amlogic,meson-g12a-mali",
 	  .data = &amlogic_data, },
+	/*
+	 * The Meizu MediaTek Midgard SoCs need the non-coherent override
+	 * (see mediatek_midgard_data). Their DTs name the plain ARM
+	 * compatible so these entries must come before the generic ones.
+	 */
+	{ .compatible = "mediatek,mt6735-mali", .data = &mediatek_midgard_data, },
+	{ .compatible = "mediatek,mt6753-mali", .data = &mediatek_midgard_data, },
+	{ .compatible = "mediatek,mt6755-mali", .data = &mediatek_midgard_data, },
+	{ .compatible = "mediatek,mt6750-mali", .data = &mediatek_midgard_data, },
+	{ .compatible = "mediatek,mt6797-mali", .data = &mediatek_midgard_data, },
 	{ .compatible = "arm,mali-t604", .data = &default_data, },
 	{ .compatible = "arm,mali-t624", .data = &default_data, },
 	{ .compatible = "arm,mali-t628", .data = &default_data, },

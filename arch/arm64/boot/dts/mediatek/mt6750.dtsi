@@ -7,6 +7,7 @@
 #include <dt-bindings/clock/mediatek,mt6755-clk.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/power/mediatek,mt6755-power.h>
 #include <dt-bindings/reset/mt6755-resets.h>
 
 / {
@@ -232,5 +233,98 @@
 			 <&topckgen CLK_TOP_MUX_MSDC50_0>;
 		clock-names = "source", "hclk", "source_cg";
 		status = "disabled";
+	};
+
+	/*
+	 * GPU support for MT6750 (the MT6755 silicon family: 8x Cortex-A53,
+	 * Mali-T860MP2 at 0x13040000). The MT6750 boards include this file
+	 * directly, so the GPU nodes are described here, identical to the
+	 * MT6755 ones in mt6755.dtsi: JOB=SPI218 MMU=SPI217 GPU=SPI216 all
+	 * LEVEL_LOW, core clock mfgcfg MFG_BG3D parented on the topckgen
+	 * MFG mux, MTCMOS chain MFG_ASYNC -> MFG.
+	 */
+	scpsys: syscon@10006000 {
+		compatible = "mediatek,mt6755-scpsys", "syscon", "simple-mfd";
+		reg = <0 0x10006000 0 0x1000>;
+
+		spm: power-controller {
+			compatible = "mediatek,mt6755-power-controller";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			#power-domain-cells = <1>;
+			mediatek,infracfg = <&infrasys>;
+
+			power-domain@MT6755_POWER_DOMAIN_DISP {
+				reg = <MT6755_POWER_DOMAIN_DISP>;
+				#power-domain-cells = <0>;
+				clocks = <&topckgen CLK_TOP_MUX_MM>;
+				clock-names = "mm";
+			};
+
+			power-domain@MT6755_POWER_DOMAIN_MFG_ASYNC {
+				reg = <MT6755_POWER_DOMAIN_MFG_ASYNC>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				#power-domain-cells = <0>;
+
+				power-domain@MT6755_POWER_DOMAIN_MFG {
+					reg = <MT6755_POWER_DOMAIN_MFG>;
+					#power-domain-cells = <0>;
+					clocks = <&topckgen CLK_TOP_MUX_MFG>;
+					clock-names = "mfg";
+				};
+			};
+		};
+	};
+
+	/*
+	 * mfgcfg gate: registers inertly, MFG_ASYNC is powered by the GPU
+	 * consumer (panfrost) before BG3D is enabled. See
+	 * drivers/clk/mediatek/clk-mt6755-mfg.c.
+	 */
+	mfgcfg: clock-controller@13000000 {
+		compatible = "mediatek,mt6755-mfgcfg";
+		reg = <0 0x13000000 0 0x1000>;
+		#clock-cells = <1>;
+		status = "disabled";
+	};
+
+	gpu: gpu@13040000 {
+		compatible = "mediatek,mt6750-mali", "arm,mali-t860",
+			     "arm,mali-midgard";
+		reg = <0 0x13040000 0 0x4000>;
+		interrupts = <GIC_SPI 218 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 217 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 216 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-names = "job", "mmu", "gpu";
+		clocks = <&mfgcfg CLK_MFG_BG3D>, <&topckgen CLK_TOP_MUX_MFG>;
+		clock-names = "core", "bus";
+		power-domains = <&spm MT6755_POWER_DOMAIN_MFG>;
+		operating-points-v2 = <&gpu_opp_table>;
+		status = "disabled";
+	};
+
+	/*
+	 * MT6750 GPU DVFS table, same profile as MT6755 (stock
+	 * mt_gpufreq.c "HPM": 600 / 448.5 / 299 MHz).
+	 */
+	gpu_opp_table: opp-table-gpu {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-600000000 {
+			opp-hz = /bits/ 64 <600000000>;
+			opp-microvolt = <1150000>;
+		};
+
+		opp-448500000 {
+			opp-hz = /bits/ 64 <448500000>;
+			opp-microvolt = <1050000>;
+		};
+
+		opp-299000000 {
+			opp-hz = /bits/ 64 <299000000>;
+			opp-microvolt = <1050000>;
+		};
 	};
 };

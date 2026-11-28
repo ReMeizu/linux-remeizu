@@ -171,6 +171,24 @@
 				regulator-name = "vusb33";
 				regulator-boot-on;
 			};
+
+			/*
+			 * MT6351 BUCK_VGPU, the GPU rail on this board. The
+			 * stock MX6 drives VGPU from an external I2C buck on
+			 * i2c7 instead (rt5735@0x1c / fan53200@0x60, the
+			 * vendor's "VGPU Buck Start" block, VGPU_SET_BY_EXTIC
+			 * in mt_gpufreq.c); that regulator has no mainline
+			 * driver, so no GPU OPP regulator is attached and the
+			 * rail stays at the LK value. The GPU OPP table in
+			 * mt6797.dtsi therefore does not name a supply. This
+			 * node only describes the MT6351 buck such a consumer
+			 * could use - like every other MT6351 rail in this
+			 * file, it relies on the driver keeping the hardware
+			 * voltage unless it is told otherwise.
+			 */
+			mt6351_vgpu: buck-vgpu {
+				regulator-name = "vgpu";
+			};
 		};
 	};
 };
@@ -253,5 +271,26 @@
 	};
 };
 &disp_pwm0 {
+	status = "okay";
+};
+
+/*
+ * Mali-T880MP4 GPU. The SoC-level nodes live in mt6797.dtsi: mali@13040000
+ * with SPI 264 (JOB) / 263 (MMU) / 262 (GPU) LEVEL_LOW, clocked by the
+ * mfgcfg MFG_BG3D gate, powered through the MTCMOS chain
+ * MFG_ASYNC -> MFG -> MFG_CORE0..3 and driven by the stock 700/610/520/
+ * 442.5/365/238 MHz DVFS table (mt6797.dtsi:3007-3056 and mt_gpufreq.c:
+ * 128-172, 281-288 in the vendor kernel-m685-3.18 tree).
+ *
+ * The stock MX6 feeds VGPU from an external I2C buck (rt5735 / fan53200
+ * on i2c7, the vendor "VGPU Buck Start" block), not from the MT6351, and
+ * that regulator has no mainline driver yet. No OPP regulator is attached:
+ * devfreq only retunes mfg_sel and the rail stays where LK left it.
+ */
+&mfgcfg {
+	status = "okay";
+};
+
+&gpu {
 	status = "okay";
 };

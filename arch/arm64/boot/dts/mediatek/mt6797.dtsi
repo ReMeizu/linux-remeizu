@@ -4,6 +4,7 @@
  * Author: Mars.C <mars.cheng@mediatek.com>
  */
 
+#include <dt-bindings/clock/mediatek,mt6797-mfgcfg.h>
 #include <dt-bindings/clock/mt6797-clk.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -216,7 +217,13 @@
 		};
 	};
 
-	scpsys: power-controller@10006000 {
+	/*
+	 * Legacy MT6797 clock/power-controller node: not a genpd provider
+	 * (that is "spm", mt6797-power-controller, further down this file),
+	 * it only backs the power-domain-cells phandle on mmsys. Unit
+	 * address renamed so it no longer collides with the SPM genpd node.
+	 */
+	scpsys: clock-controller@10006000 {
 		compatible = "mediatek,mt6797-scpsys";
 		#power-domain-cells = <1>;
 		reg = <0 0x10006000 0 0x1000>;
@@ -821,5 +828,142 @@
 		reg = <0 0x19000000 0 0x10000>,    /* GICD */
 		      <0 0x19200000 0 0x200000>,   /* GICR */
 		      <0 0x10240000 0 0x2000>;     /* GICC */
+	};
+	/*
+	 * Mali-T880MP4 GPU support.
+	 *
+	 * The original "mediatek,mt6797-scpsys" node (above, label scpsys,
+	 * kept for the MM/MMSYS power-domain phandles) is driver-less: the
+	 * kernel binds the genpd provider through "mediatek,mt6797-power-controller"
+	 * (drivers/pmdomain/mediatek/mt6797-pm-domains.h). The GPU needs the
+	 * nested MTCMOS hierarchy MFG_ASYNC -> MFG -> MFG_CORE0..3, so this
+	 * spm node exposes exactly those five domains of the same SPM block.
+	 *
+	 * VERIFIED-FROM-STOCK (kernel-m685-3.18 arch/arm64/boot/dts/
+	 * mt6797.dtsi:3007-3056 and drivers/misc/mediatek/base/power/include/
+	 * spm_v2/mt_spm_reg_mt6797.h): MFG_ASYNC 0x334, MFG 0x338,
+	 * MFG_CORE0..3 0x340..0x34c, PWR_STATUS 0x180; mfgcfg g3d_config at
+	 * 0x13000000, mali@13040000 with SPI 264 (JOB) / 263 (MMU) / 262
+	 * (GPU) LEVEL_LOW; the stock GPU DVFS table is
+	 * mt_gpufreq_opp_tbl_e1_0[] = 700 / 610 / 520 / 442.5 / 365 / 238 MHz
+	 * (mt_gpufreq.c:128-172, 281-288).
+	 */
+	spm: power-controller@10006000 {
+		compatible = "mediatek,mt6797-power-controller";
+		reg = <0 0x10006000 0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		#power-domain-cells = <1>;
+		access-controllers = <&infrasys>;
+		mediatek,infracfg = <&infrasys>;
+
+		power-domain@MT6797_POWER_DOMAIN_MFG_ASYNC {
+			reg = <MT6797_POWER_DOMAIN_MFG_ASYNC>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			#power-domain-cells = <0>;
+			mediatek,infracfg = <&infrasys>;
+
+			power-domain@MT6797_POWER_DOMAIN_MFG {
+				reg = <MT6797_POWER_DOMAIN_MFG>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				#power-domain-cells = <0>;
+				mediatek,infracfg = <&infrasys>;
+
+				power-domain@MT6797_POWER_DOMAIN_MFG_CORE0 {
+					reg = <MT6797_POWER_DOMAIN_MFG_CORE0>;
+					#power-domain-cells = <0>;
+				};
+
+				power-domain@MT6797_POWER_DOMAIN_MFG_CORE1 {
+					reg = <MT6797_POWER_DOMAIN_MFG_CORE1>;
+					#power-domain-cells = <0>;
+				};
+
+				power-domain@MT6797_POWER_DOMAIN_MFG_CORE2 {
+					reg = <MT6797_POWER_DOMAIN_MFG_CORE2>;
+					#power-domain-cells = <0>;
+				};
+
+				power-domain@MT6797_POWER_DOMAIN_MFG_CORE3 {
+					reg = <MT6797_POWER_DOMAIN_MFG_CORE3>;
+					#power-domain-cells = <0>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * mfgcfg clock gate. Registers inertly: mfgcfg lives in the
+	 * MFG_ASYNC MTCMOS domain and is brought up by the GPU consumer
+	 * (panfrost, through the "mfg" power domain) before it enables
+	 * BG3D. See drivers/clk/mediatek/clk-mt6797-mfg.c.
+	 */
+	mfgcfg: clock-controller@13000000 {
+		compatible = "mediatek,mt6797-mfgcfg";
+		reg = <0 0x13000000 0 0x1000>;
+		#clock-cells = <1>;
+		status = "disabled";
+	};
+
+	gpu: gpu@13040000 {
+		compatible = "mediatek,mt6797-mali", "arm,mali-t880",
+			     "arm,mali-midgard";
+		reg = <0 0x13040000 0 0x4000>;
+		interrupts = <GIC_SPI 264 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 263 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 262 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-names = "job", "mmu", "gpu";
+		clocks = <&mfgcfg CLK_MFG_BG3D>, <&topckgen CLK_TOP_MUX_MFG>;
+		clock-names = "core", "bus";
+		clock-frequency = <700000000>;
+		power-domains = <&spm MT6797_POWER_DOMAIN_MFG>;
+		operating-points-v2 = <&gpu_opp_table>;
+		status = "disabled";
+	};
+
+	/*
+	 * GPU DVFS table, stock MX6 "freq_table_type = 0" profile
+	 * (mt_gpufreq.c:281-288): 700/610/520/442.5/365/238 MHz with the
+	 * vendor Vcore-mapped voltages. The MX6 VGPU rail is an external I2C
+	 * buck (rt5735@i2c7:0x1c / fan53200@i2c7:0x60, the "VGPU Buck" block
+	 * of the stock DTS, VGPU_SET_BY_EXTIC in mt_gpufreq.c) whose
+	 * regulator driver is not in mainline, so no OPP regulator is
+	 * attached and devfreq only retunes mfg_sel.
+	 */
+	gpu_opp_table: opp-table-gpu {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-700000000 {
+			opp-hz = /bits/ 64 <700000000>;
+			opp-microvolt = <1090400>;
+		};
+
+		opp-610000000 {
+			opp-hz = /bits/ 64 <610000000>;
+			opp-microvolt = <1039100>;
+		};
+
+		opp-520000000 {
+			opp-hz = /bits/ 64 <520000000>;
+			opp-microvolt = <1000600>;
+		};
+
+		opp-442500000 {
+			opp-hz = /bits/ 64 <442500000>;
+			opp-microvolt = <949300>;
+		};
+
+		opp-365000000 {
+			opp-hz = /bits/ 64 <365000000>;
+			opp-microvolt = <910800>;
+		};
+
+		opp-238000000 {
+			opp-hz = /bits/ 64 <238000000>;
+			opp-microvolt = <859500>;
+		};
 	};
 };

@@ -28,6 +28,22 @@ properties:
           - const: arm,mali-t720
       - items:
           - enum:
+              - mediatek,mt6735-mali
+              - mediatek,mt6753-mali
+          - const: arm,mali-t720
+      - items:
+          - enum:
+              - mediatek,mt6750-mali
+              - mediatek,mt6755-mali
+              - rockchip,rk3399-mali
+          - const: arm,mali-t860
+      - items:
+          - enum:
+              - mediatek,mt6797-mali
+              - samsung,exynos8890-mali
+          - const: arm,mali-t880
+      - items:
+          - enum:
               - amlogic,meson-gxm-mali
               - realtek,rtd1295-mali
           - const: arm,mali-t820
@@ -49,14 +65,6 @@ properties:
           - enum:
               - samsung,exynos7870-mali
           - const: arm,mali-t830
-      - items:
-          - enum:
-              - rockchip,rk3399-mali
-          - const: arm,mali-t860
-      - items:
-          - enum:
-              - samsung,exynos8890-mali
-          - const: arm,mali-t880
 
   reg:
     maxItems: 1
@@ -89,6 +97,10 @@ properties:
 
   power-domains:
     maxItems: 1
+    description:
+      On MediaTek SoCs the GPU hangs off one MTCMOS domain, "mfg" on
+      MT6750/MT6755/MT6797, which may stand for the nested MFG_ASYNC ->
+      MFG -> MFG_CORE0..3 hierarchy.
 
   resets:
     minItems: 1

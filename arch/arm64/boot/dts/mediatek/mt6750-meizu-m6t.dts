@@ -173,3 +173,37 @@
 	no-sdio;
 	status = "okay";
 };
+
+/*
+ * Mali-T860MP2 GPU (MT6750), same SoC block as MT6755: mali@13040000,
+ * SPI 218/217/216, mfgcfg MFG_BG3D gate, MFG MTCMOS domain. The MT6750
+ * uses the identical GPU DVFS profile (600 / 448.5 / 299 MHz), taken from
+ * the stock mt_gpufreq.c default table.
+ */
+&mfgcfg {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
+&gpu_opp_table {
+	compatible = "operating-points-v2";
+	opp-shared;
+
+	opp-600000000 {
+		opp-hz = /bits/ 64 <600000000>;
+		opp-microvolt = <1150000>;
+	};
+
+	opp-448500000 {
+		opp-hz = /bits/ 64 <448500000>;
+		opp-microvolt = <1050000>;
+	};
+
+	opp-299000000 {
+		opp-hz = /bits/ 64 <299000000>;
+		opp-microvolt = <1050000>;
+	};
+};
