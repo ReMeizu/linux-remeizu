@@ -84,11 +84,11 @@
 		 * Modem/connectivity reservations.  Sizes are the stock
 		 * DTS values (stock-appended.dts reserve-memory-ccci_md1,
 		 * reserve-memory-ccci_share, consys-reserve-memory,
-		 * spm-reserve-memory).  The modem is not driven by this
-		 * kernel, but its firmware may still be live when Linux
-		 * boots, so its RAM is kept out of the allocator.  Placement
-		 * is left to the early allocator and will not necessarily
-		 * match where LK put it.
+		 * spm-reserve-memory). The ECCCI modem driver loads the
+		 * firmware into modem-md1 and ccci_fsd maps modem-share, so
+		 * neither may reach the page allocator. Placement is left to
+		 * the early allocator and will not necessarily match where LK
+		 * put it.
 		 */
 		modem-md1 {
 			size = <0 0xa100000>;
@@ -190,5 +190,13 @@
 	non-removable;
 	no-sd;
 	no-sdio;
+	status = "okay";
+};
+
+/*
+ * MD1 cellular modem: CLDMA rings plus the CCIF doorbell, registers from
+ * mt6755.dtsi.
+ */
+&mdcldma {
 	status = "okay";
 };

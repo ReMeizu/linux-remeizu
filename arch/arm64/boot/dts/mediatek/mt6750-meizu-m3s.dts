@@ -77,11 +77,12 @@
 		};
 
 		/*
-		 * Modem/connectivity reservations, sizes from the stock DTS
-		 * (stock-0.dts reserve-memory-ccci_md1, ccci_share,
-		 * consys-reserve-memory, spm-reserve-memory).  The modem is
-		 * not driven by this kernel, but its firmware may still be
-		 * live when Linux boots.
+		 * MD1 modem DRAM and the shared memory window, sizes from the
+		 * stock DTS (reserve-memory-ccci_md1 / ccci_share, next to
+		 * consys-reserve-memory and spm-reserve-memory below). They
+		 * must never reach the page allocator: the ECCCI driver loads
+		 * the firmware there and the AP programs the MD with these
+		 * addresses.
 		 */
 		modem-md1 {
 			size = <0 0x8000000>;
@@ -179,5 +180,13 @@
 	non-removable;
 	no-sd;
 	no-sdio;
+	status = "okay";
+};
+
+/*
+ * MD1 cellular modem, enabled on the M3s as well. The SoC node lives in
+ * mt6755.dtsi; the clocks are the CCIF AP/MD and CLDMA gates.
+ */
+&mdcldma {
 	status = "okay";
 };

@@ -207,6 +207,33 @@
 			#clock-cells = <1>;
 		};
 
+		/*
+		 * MD1 cellular modem: CLDMA DMA rings plus the CCIF doorbell.
+		 * Register windows and interrupt numbers are the vendor ones
+		 * (4.9 mt6735 DTS): CLDMA AO 0x1000a000/0x1000b000, CLDMA PD
+		 * 0x1021a000/0x1021b000, CCIF 0x1020a000/0x1020b000, IRQ 145
+		 * (CLDMA), 140 (CCIF) and 221 (MD watchdog).
+		 */
+		mdcldma: mdcldma@1000a000 {
+			compatible = "mediatek,mt6735-mdcldma";
+			reg = <0 0x1000a000 0 0x1000>,	/* AP CLDMA AO */
+			      <0 0x1000b000 0 0x1000>,	/* MD CLDMA AO */
+			      <0 0x1021a000 0 0x1000>,	/* AP CLDMA PD */
+			      <0 0x1021b000 0 0x1000>,	/* MD CLDMA PD */
+			      <0 0x1020a000 0 0x1000>,	/* AP CCIF */
+			      <0 0x1020b000 0 0x1000>;	/* MD CCIF */
+			interrupts = <GIC_SPI 145 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 140 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 221 IRQ_TYPE_EDGE_FALLING>;
+			mediatek,md_id = <0>;
+			mediatek,cldma_capability = <2>;
+			mediatek,md_smem_size = <0x10000>;
+			clocks = <&infracfg CLK_INFRA_CCIF0_AP>,
+				 <&infracfg CLK_INFRA_CLDMA>;
+			clock-names = "ccif-ap", "cldma";
+			status = "disabled";
+		};
+
 		pio: pin-controller@10211000 {
 			compatible = "mediatek,mt6735-pinctrl";
 			reg = <0 0x10211000 0 0x800>,

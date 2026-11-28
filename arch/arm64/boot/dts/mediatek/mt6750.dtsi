@@ -223,6 +223,35 @@
 		reset-names = "pwrap";
 	};
 
+	/*
+	 * MD1 cellular modem: CLDMA DMA rings plus the CCIF doorbell.
+	 * MT6750 is an MT6755 derivative and shares its die, so the
+	 * register windows and IRQs are the MT6755 ones (vendor
+	 * mt6755.dtsi: CLDMA AO 0x10014000/0x10015000, CLDMA PD
+	 * 0x1021b000/0x1021c000, CCIF 0x10209000/0x1020a000, IRQ 222
+	 * (CLDMA), 139 (CCIF) and 223 (MD watchdog)).
+	 */
+	mdcldma: mdcldma@10014000 {
+		compatible = "mediatek,mt6755-mdcldma";
+		reg = <0 0x10014000 0 0x1e00>,	/* AP CLDMA AO */
+		      <0 0x10015000 0 0x1e00>,	/* MD CLDMA AO */
+		      <0 0x1021b000 0 0x1e00>,	/* AP CLDMA PD */
+		      <0 0x1021c000 0 0x1e00>,	/* MD CLDMA PD */
+		      <0 0x10209000 0 0x1000>,	/* AP CCIF */
+		      <0 0x1020a000 0 0x1000>;	/* MD CCIF */
+		interrupts = <GIC_SPI 222 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 139 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 223 IRQ_TYPE_EDGE_FALLING>;
+		mediatek,md_id = <0>;
+		mediatek,cldma_capability = <6>;
+		mediatek,md_smem_size = <0x100000>;
+		clocks = <&infrasys CLK_INFRA_CCIF_AP>,
+			 <&infrasys CLK_INFRA_CCIF_MD>,
+			 <&infrasys CLK_INFRA_CLDMA_BCLK>;
+		clock-names = "ccif-ap", "ccif-md", "cldma";
+		status = "disabled";
+	};
+
 	mmc0: mmc@11230000 {
 		compatible = "mediatek,mt6755-mmc", "mediatek,mt6795-mmc";
 		reg = <0 0x11230000 0 0x1000>;

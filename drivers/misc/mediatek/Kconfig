@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# MediaTek specific drivers
+
+menu "MediaTek SoC drivers"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+
+source "drivers/misc/mediatek/eccci/Kconfig"
+
+endmenu

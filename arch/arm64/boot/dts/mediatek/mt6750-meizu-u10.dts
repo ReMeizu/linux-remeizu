@@ -57,7 +57,34 @@
 		lk: lk@46000000 {
 			reg = <0 0x46000000 0 0x400000>;
 		};
+
+		/*
+		 * MD1 cellular modem DRAM and the 6 MiB shared memory window
+		 * ccci_fsd maps: vendor reserve-memory-ccci_md1 / ccci_share
+		 * sizes for the MT6750. The ECCCI driver loads the firmware
+		 * into the first and programs the MD with both addresses.
+		 */
+		modem-md1 {
+			size = <0 0xa100000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+		modem-share {
+			size = <0 0x600000>;
+			alignment = <0 0x4000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
 	};
+};
+
+/*
+ * MD1 cellular modem: CLDMA rings plus the CCIF doorbell, register windows
+ * and interrupts come from mt6750.dtsi.
+ */
+&mdcldma {
+	status = "okay";
 };
 
 &pio {
