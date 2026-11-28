@@ -1,0 +1,286 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * mt6328.h  --  MediaTek MT6328/MT6353 PMIC audio codec register map
+ *
+ * The MT6328 (MT6735/MT6737M) and the MT6353 (MT6753/MT6750) PMICs embed
+ * the same PMIC audio codec: an MTKAIF serial interface to the SoC audio
+ * front-end, a 24 bit DAC with loudspeaker, headphone and handset amplifiers
+ * with zero-crossing volume control, and a 24 bit ADC with three
+ * preamplifiers and built-in mic bias.
+ *
+ * Register offsets are hardware page-0 offsets taken from the vendor 4.9
+ * BSP (UPmu register map,
+ * drivers/misc/mediatek/include/mt-plat/mt6735/include/mach/upmu_hw.h,
+ * "MT6328_*" and the audio glue in
+ * sound/soc/mediatek/mt6735/AudDrv_Ana.h, "PMIC_REG_BASE + <offset>").
+ * Accesses are 16 bit.
+ */
+
+#ifndef _MT6328_H_
+#define _MT6328_H_
+
+/* Zero-crossing controlled analog volumes */
+#define MT6328_ZCD_CON0				0x0800
+#define MT6328_ZCD_CON1				0x0802
+#define MT6328_ZCD_CON2				0x0804
+#define MT6328_ZCD_CON3				0x0806
+#define MT6328_ZCD_CON4				0x0808
+#define MT6328_ZCD_CON5				0x080A
+
+/* Top level audio control */
+#define MT6328_TOP_CKPDN_CON0			0x023C
+#define MT6328_TOP_CLKSQ			0x028A
+#define MT6328_TOP_RST_CON0			0x0298
+
+/* DAC / output amplifier analog block */
+#define MT6328_AUDDEC_ANA_CON0			0x0CDC
+#define MT6328_AUDDEC_ANA_CON1			0x0CDE
+#define MT6328_AUDDEC_ANA_CON2			0x0CE0
+#define MT6328_AUDDEC_ANA_CON3			0x0CE2
+#define MT6328_AUDDEC_ANA_CON4			0x0CE4
+#define MT6328_AUDDEC_ANA_CON5			0x0CE6
+#define MT6328_AUDDEC_ANA_CON6			0x0CE8
+#define MT6328_AUDDEC_ANA_CON7			0x0CEA
+#define MT6328_AUDDEC_ANA_CON8			0x0CEC
+#define MT6328_AUDDEC_ANA_CON9			0x0CE0
+#define MT6328_AUDDEC_ANA_CON10			0x0CE2
+
+/* ADC / preamplifier / mic bias block */
+#define MT6328_AUDENC_ANA_CON0			0x0CEE
+#define MT6328_AUDENC_ANA_CON1			0x0CF0
+#define MT6328_AUDENC_ANA_CON2			0x0CF2
+#define MT6328_AUDENC_ANA_CON3			0x0CF4
+#define MT6328_AUDENC_ANA_CON4			0x0CF6
+#define MT6328_AUDENC_ANA_CON5			0x0CF8
+#define MT6328_AUDENC_ANA_CON6			0x0CFA
+#define MT6328_AUDENC_ANA_CON7			0x0CFC
+#define MT6328_AUDENC_ANA_CON8			0x0CFE
+#define MT6328_AUDENC_ANA_CON9			0x0D00
+#define MT6328_AUDENC_ANA_CON10			0x0D02
+
+/* Audio front end (MTKAIF) register window */
+#define MT6328_AFE_BASE				0x2000
+#define MT6328_AFE_UL_DL_CON0			(MT6328_AFE_BASE + 0x00)
+#define MT6328_AFE_DL_SRC2_CON0_H		(MT6328_AFE_BASE + 0x02)
+#define MT6328_AFE_DL_SRC2_CON0_L		(MT6328_AFE_BASE + 0x04)
+#define MT6328_AFE_DL_SDM_CON0			(MT6328_AFE_BASE + 0x06)
+#define MT6328_AFE_DL_SDM_CON1			(MT6328_AFE_BASE + 0x08)
+#define MT6328_AFE_UL_SRC0_CON0_H		(MT6328_AFE_BASE + 0x0a)
+#define MT6328_AFE_UL_SRC0_CON0_L		(MT6328_AFE_BASE + 0x0c)
+#define MT6328_AFE_TOP_CON0			(MT6328_AFE_BASE + 0x12)
+#define MT6328_AFE_AUDIO_TOP_CON0		(MT6328_AFE_BASE + 0x14)
+#define MT6328_AFUNC_AUD_CON0			(MT6328_AFE_BASE + 0x1c)
+#define MT6328_AFUNC_AUD_CON2			(MT6328_AFE_BASE + 0x20)
+#define MT6328_AFE_PMIC_NEWIF_CFG0		(MT6328_AFE_BASE + 0x38)
+#define MT6328_AFE_PMIC_NEWIF_CFG2		(MT6328_AFE_BASE + 0x3c)
+#define MT6328_AFE_SGEN_CFG0			(MT6328_AFE_BASE + 0x40)
+#define MT6328_AFE_DCCLK_CFG0			(MT6328_AFE_BASE + 0x90)
+
+#define MT6328_MAX_REGISTER			MT6328_AUDENC_ANA_CON10
+
+/* TOP_CKPDN_CON0 audio clock gates (1 = powered down) */
+#define RG_AUDNCP_CK_PDN_SFT			12
+#define RG_AUDIF_CK_PDN_SFT			13
+#define RG_AUD_CK_PDN_SFT			14
+#define RG_ZCD13M_CK_PDN_SFT			15
+
+/* AUDIO_TOP_CON0 digital gates (1 = powered down) */
+#define AUD_TOP_PWR_CLK_DIS_CTL_SFT		2
+#define AUD_TOP_PDN_AFE_CTL_SFT			7
+
+/* AFE_UL_DL_CON0 */
+#define RG_AFE_ON_SFT				0
+
+/* AFE_DL_SRC2_CON0_L */
+#define RG_DL_2_SRC_ON_TMP_CTL_PRE_SFT		0
+#define RG_DL_2_MUTE_OFF_SFT			11
+
+/* AFE_UL_SRC0_CON0_L / _H */
+#define RG_UL_SRC_ON_TMP_CTL_SFT		0
+#define RG_UL_SRC0_MODE_SFT			1
+
+/* AFE_TOP_CON0 */
+#define RG_DL_SINE_ON_SFT			0
+#define RG_DL_SINE_ON_MASK			0x1
+#define RG_UL_SINE_ON_SFT			1
+#define RG_UL_SINE_ON_MASK			0x1
+
+/* AFE_SGEN_CFG0 */
+#define SGEN_C_MUTE_SW_CTL_SFT			6
+#define SGEN_C_DAC_EN_CTL_SFT			7
+
+/* AFE_DCCLK_CFG0 */
+#define RG_DCCLK_GEN_ON_SFT			0
+
+/* AUDDEC_ANA_CON0 */
+#define RG_AUDDACLPWRUP_VAUDP32_SFT		0
+#define RG_AUDDACRPWRUP_VAUDP32_SFT		1
+#define RG_AUD_DAC_PWR_UP_VA32_SFT		2
+#define RG_AUD_DAC_PWL_UP_VA32_SFT		3
+#define RG_AUDHSPWRUP_VAUDP32_SFT		4
+#define RG_AUDHPLPWRUP_VAUDP32_SFT		5
+#define RG_AUDHPRPWRUP_VAUDP32_SFT		6
+#define RG_AUDHSMUXINPUTSEL_VAUDP32_SFT		7
+#define RG_AUDHSMUXINPUTSEL_VAUDP32_MASK	0x3
+#define RG_AUDHPLMUXINPUTSEL_VAUDP32_SFT	9
+#define RG_AUDHPLMUXINPUTSEL_VAUDP32_MASK	0x3
+#define RG_AUDHPRMUXINPUTSEL_VAUDP32_SFT	11
+#define RG_AUDHPRMUXINPUTSEL_VAUDP32_MASK	0x3
+
+/* AUDDEC_ANA_CON1 */
+#define RG_HSOUTPUTSTBENH_VAUDP32_SFT		8
+
+/* AUDDEC_ANA_CON3 */
+#define RG_AUDLOLPWRUP_VAUDP32_SFT		2
+#define RG_AUDLOLMUXINPUTSEL_VAUDP32_SFT	3
+#define RG_AUDLOLMUXINPUTSEL_VAUDP32_MASK	0x3
+#define RG_LOOUTPUTSTBENH_VAUDP32_SFT		9
+
+/* AUDDEC_ANA_CON6 */
+#define RG_ABIDEC_RSVD0_VAUDP32_HPL_SFT		8
+#define RG_ABIDEC_RSVD0_VAUDP32_HPR_SFT		9
+#define RG_ABIDEC_RSVD0_VAUDP32_HS_SFT		10
+#define RG_ABIDEC_RSVD0_VAUDP32_LOL_SFT		11
+
+/* AUDDEC_ANA_CON9 */
+#define RG_AUDIBIASPWRDN_VAUDP32_SFT		8
+#define RG_RSTB_DECODER_VA32_SFT		9
+#define RG_AUDGLB_PWRDN_VA32_SFT		12
+#define RG_LCLDO_DEC_EN_VA32_SFT		13
+
+/* AUDDEC_ANA_CON10 */
+#define RG_NVREG_EN_VAUDP32_SFT			8
+
+/* AUDENC_ANA_CON0 / CON1 */
+#define RG_AUDPREAMPLON_SFT			0
+#define RG_AUDPREAMPLDCCEN_SFT			1
+#define RG_AUDPREAMPLDCPRECHARGE_SFT		2
+#define RG_AUDPREAMPLINPUTSEL_SFT		4
+#define RG_AUDPREAMPLINPUTSEL_MASK		0x3
+#define RG_AUDADCLPWRUP_SFT			12
+#define RG_AUDADCLINPUTSEL_SFT			13
+#define RG_AUDADCLINPUTSEL_MASK			0x3
+
+#define RG_AUDPREAMPRON_SFT			0
+#define RG_AUDPREAMPRDCCEN_SFT			1
+#define RG_AUDPREAMPRDCPRECHARGE_SFT		2
+#define RG_AUDPREAMPRINPUTSEL_SFT		4
+#define RG_AUDPREAMPRINPUTSEL_MASK		0x3
+#define RG_AUDADCRPWRUP_SFT			12
+#define RG_AUDADCRINPUTSEL_SFT			13
+#define RG_AUDADCRINPUTSEL_MASK			0x3
+
+/* AUDENC_ANA_CON3 */
+#define RG_AUDADCLK_MODE_SFT			4
+#define RG_AUDADCLK_SRC_SFT			2
+#define RG_AUDADCCLKRSTB_SFT			6
+
+/* AUDENC_ANA_CON9 (mic bias 0 / 2) and CON10 (mic bias 1) */
+#define RG_AUDPWDBMICBIAS0_SFT			0
+#define RG_AUDMICBIAS0VREF_SFT			4
+#define RG_AUDMICBIAS0LOWPEN_SFT		7
+
+#define RG_AUDPWDBMICBIAS2_SFT			8
+#define RG_AUDMICBIAS2VREF_SFT			12
+#define RG_AUDMICBIAS2LOWPEN_SFT		15
+
+#define RG_AUDPWDBMICBIAS1_SFT			0
+#define RG_AUDMICBIAS1DCSW1NEN_SFT		2
+#define RG_AUDMICBIAS1VREF_SFT			4
+#define RG_AUDMICBIAS1LOWPEN_SFT		7
+
+/*
+ * The vendor BSP (mt_soc_codec_63xx.c) programs several analog power
+ * blocks with whole-register values instead of individual bits, because the
+ * power-up/down ordering and the surrounding bits matter. These are the
+ * values used by the driver's power sequences.
+ */
+/* AUDDEC_ANA_CON0: DAC/HP/HS power-up and mux states */
+#define AUDDEC_ANA_CON0_HP_PWRUP		0xE080	/* DAC pwr up, mux open */
+#define AUDDEC_ANA_CON0_HP_CLK			0xE089	/* audio clock, DAC L */
+#define AUDDEC_ANA_CON0_HS_DRV			0xE090	/* enable voice driver */
+#define AUDDEC_ANA_CON0_HS_DAC			0xE09F	/* enable audio DAC */
+#define AUDDEC_ANA_CON0_HP_DAC_MUX		0xF49F	/* HP mux -> audio DAC */
+#define AUDDEC_ANA_CON0_HP_EN			0xF4FF	/* enable HPR/HPL */
+#define AUDDEC_ANA_CON0_HP_HS_OFF		0xF46F	/* open HS input mux */
+#define AUDDEC_ANA_CON0_HP_OFF			0xF40F	/* disable HPR/HPL */
+#define AUDDEC_ANA_CON0_HS_DRV_OFF		0xE109	/* disable HS driver */
+#define AUDDEC_ANA_CON0_HS_MUX_DAC		0xE119	/* HS mux -> audio DAC */
+#define AUDDEC_ANA_CON0_DAC_L_ON		0x0009	/* enable DAC L (spk) */
+#define AUDDEC_ANA_CON0_LOL_MUX_SFT		0
+#define AUDDEC_ANA_CON0_LOL_MUX_MASK		0x3
+
+/* AUDDEC_ANA_CON1: HP/HS de-OSC and output STB enhancement */
+#define AUDDEC_ANA_CON1_HP_STB			0x0480
+#define AUDDEC_ANA_CON1_HS_STB			0x1000
+
+/* AUDDEC_ANA_CON3: headphone detection */
+#define RG_AUDHPDET_SFT				7
+#define RG_AUDHPDET_SEL_SFT			8
+#define RG_AUDHPDET_SEL_MASK			0x7
+#define AUDDEC_ANA_CON3_HPDET_EN		0x0080
+
+/* AUDDEC_ANA_CON4 / CON5: HS driver bias */
+#define AUDDEC_ANA_CON4_HSBIAS			0x0700
+#define AUDDEC_ANA_CON4_HSBIAS_OFF		0x0300
+#define AUDDEC_ANA_CON5_HSBIAS			0x5490
+
+/* AUDDEC_ANA_CON6 / CON7: cap-less LDOs, IBIST, AUD_CLK, NV regulator */
+#define AUDDEC_ANA_CON6_LDO_MASK		0xfeeb
+#define AUDDEC_ANA_CON6_NCP_EN			0x0A41
+#define AUDDEC_ANA_CON6_HC_LDO			0x2AC1
+#define AUDDEC_ANA_CON6_LC_LDO			0x2AC0
+#define AUDDEC_ANA_CON6_IBIST			0x2AC0
+#define AUDDEC_ANA_CON6_AUD_CLK			0x2AC2
+#define AUDDEC_ANA_CON6_LDO_OFF			0x02c1
+#define AUDDEC_ANA_CON6_ADC_CLKGEN		0x0004
+#define AUDDEC_ANA_CON6_LCLDO_ENC		0x0104
+#define RG_AUDNVREG_EN_SFT			15
+#define AUDDEC_ANA_CON7_NVREG			0x8000
+#define AUDDEC_ANA_CON7_LCLDO_ENC_SENSE		0x0006
+
+/* AUDDEC_ANA_CON8: AUDGLB global bias */
+#define AUDDEC_ANA_CON8_AUDGLB_ON		0x0000
+#define AUDDEC_ANA_CON8_AUDGLB_OFF		0x0002
+#define RG_AUDGLB_EN_MASK			0x0003
+
+/* Charge pump (NCP) clock divider: AUDNCP_CLKDIV_CON0..4 */
+#define MT6328_AUDNCP_CLKDIV_CON0		(MT6328_AFE_BASE - 0x2000 + 0x0D04)
+#define MT6328_AUDNCP_CLKDIV_CON1		(MT6328_AFE_BASE - 0x2000 + 0x0D06)
+#define MT6328_AUDNCP_CLKDIV_CON2		(MT6328_AFE_BASE - 0x2000 + 0x0D08)
+#define MT6328_AUDNCP_CLKDIV_CON3		(MT6328_AFE_BASE - 0x2000 + 0x0D0A)
+#define MT6328_AUDNCP_CLKDIV_CON4		(MT6328_AFE_BASE - 0x2000 + 0x0D0C)
+#define AUDNCP_CLKDIV_CON2_DIV43		0x002B
+
+/* TOP_CKPDN_CON0 / _CLR / _SET and TOP_CKPDN_CON2 clock gates */
+#define MT6328_TOP_CKPDN_CON0_CLR		0x0240
+#define MT6328_TOP_CKPDN_CON0_SET		0x023E
+#define MT6328_TOP_CKPDN_CON2			0x0248
+#define MT6328_TOP_CKPDN_CON2_CLR		0x024C
+#define MT6328_TOP_CKPDN_CON2_SET		0x024A
+#define TOP_CKPDN_CON0_AUD_MASK			0x7000
+
+/* Loudspeaker Class-AB block */
+#define MT6328_SPK_ANA_CON3			0x0AB6
+#define TOP_CKPDN_CON2_CLSAB_MASK		0x0003
+#define SPK_ANA_CON3_IVBUF_MUX			0x0100
+#define SPK_ANA_CON3_IVBUF_EN			0x0110
+
+/* ADC defaults and mic bias enable values */
+#define AUDENC_ANA_CON6_DEFAULT			0x0555
+#define AUDENC_ANA_CON4_DEFAULT			0x0800
+#define AUDENC_ANA_CON9_MICBIAS_MASK		0xff19
+#define AUDENC_ANA_CON9_MICBIAS0_ON		0x0711
+#define AUDENC_ANA_CON9_MICBIAS1_MASK		0xff90
+#define AUDENC_ANA_CON9_MICBIAS1_ON		0x0710
+#define AUDENC_ANA_CON10_L_GAIN_MASK		0x000f
+#define AUDENC_ANA_CON10_R_GAIN_MASK		0x00f0
+
+/*
+ * Main microphones use the AIN0/AIN1 pins of the left preamplifier
+ * (MICBIAS0), the headset microphone the AIN2/AIN3 pins (MICBIAS1).
+ */
+#define MT6328_PRIMARY_MIC_INPUT			0
+#define MT6328_HEADSET_MIC_INPUT			1
+
+#endif

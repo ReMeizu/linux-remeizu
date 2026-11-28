@@ -729,6 +729,7 @@ static const dai_register_cb dai_register_cbs[] = {
 	mt6797_dai_adda_register,
 	mt6797_dai_pcm_register,
 	mt6797_dai_hostless_register,
+	mt6797_dai_i2s_register,
 	mt6797_dai_memif_register,
 };
 

@@ -48,6 +48,12 @@ enum mt6328_irq_status_numbers {
 	MT6328_IRQ_STATUS_FG_ZCV,
 	MT6328_IRQ_STATUS_SPKL_D,
 	MT6328_IRQ_STATUS_SPKL_AB,
+	MT6328_IRQ_NR,
 };
+
+struct mt6397_chip;
+
+int mt6328_irq_init(struct mt6397_chip *chip);
+void mt6328_irq_exit(struct mt6397_chip *chip);
 
 #endif /* __MFD_MT6323_CORE_H__ */

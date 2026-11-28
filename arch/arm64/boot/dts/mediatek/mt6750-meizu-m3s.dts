@@ -45,6 +45,13 @@
 		stdout-path = "serial0:921600n8";
 	};
 
+	sound {
+		compatible = "mediatek,mt6750-mt6353-sound";
+		model = "mt6750-meizu-m3s";
+		mediatek,platform = <&afe>;
+		mediatek,audio-codec = <&mt6353_codec>;
+	};
+
 	/*
 	 * Stock DTB value (stock-0.dts:159-162).  LK rewrites the memory
 	 * node from the EMI settings on every boot; no live M3s unit has
@@ -154,6 +161,15 @@
 		compatible = "mediatek,mt6353";
 		#address-cells = <0>;
 
+		mt6353_codec: audio-codec {
+			compatible = "mediatek,mt6353-sound";
+			#sound-dai-cells = <0>;
+		};
+
+		mt6353_accdet: accdet {
+			compatible = "mediatek,mtk-accdet";
+		};
+
 		regulators {
 			mt6353_vemc: ldo-vemc {
 				regulator-name = "vemc";
@@ -179,5 +195,9 @@
 	non-removable;
 	no-sd;
 	no-sdio;
+	status = "okay";
+};
+
+&afe {
 	status = "okay";
 };

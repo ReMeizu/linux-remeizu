@@ -142,6 +142,14 @@ config COMMON_CLK_MT6755
 	  by apmixedsys, topckgen and infracfg on the
 	  MediaTek MT6755 SoC.
 
+config COMMON_CLK_MT6755_AUDIO
+	tristate "Clock driver for MediaTek MT6755/MT6750 audsys"
+	depends on COMMON_CLK_MT6755
+	help
+	  This driver supports the MediaTek MT6755/MT6750 audio subsystem
+	  clock gates at 0x11220000 (AFE, DAC, ADC, DAC_PREDIS, APLL tuners
+	  and the 22/24 MHz audio gates), required by the ASoC AFE driver.
+
 config COMMON_CLK_MT6755_MMSYS
 	tristate "Clock driver for MediaTek MT6755 mmsys"
 	depends on COMMON_CLK_MT6755

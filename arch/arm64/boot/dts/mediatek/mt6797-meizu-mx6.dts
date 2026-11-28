@@ -98,6 +98,13 @@
 		regulator-max-microvolt = <5000000>;
 		regulator-always-on;
 	};
+
+	sound {
+		compatible = "meizu,mx6-sound";
+		model = "mt6797-meizu-mx6";
+		mediatek,platform = <&afe>;
+		mediatek,audio-codec = <&mt6351_codec>;
+	};
 };
 
 &uart0 {
@@ -156,6 +163,11 @@
 
 		rtc {
 			compatible = "mediatek,mt6351-rtc";
+		};
+
+		mt6351_codec: audio-codec {
+			compatible = "mediatek,mt6351-sound";
+			#sound-dai-cells = <0>;
 		};
 
 		regulators {
@@ -253,5 +265,9 @@
 	};
 };
 &disp_pwm0 {
+	status = "okay";
+};
+
+&afe {
 	status = "okay";
 };

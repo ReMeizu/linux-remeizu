@@ -10,6 +10,7 @@ obj-$(CONFIG_COMMON_CLK_MT6735_VDECSYS) += clk-mt6735-vdecsys.o
 obj-$(CONFIG_COMMON_CLK_MT6735_VENCSYS) += clk-mt6735-vencsys.o
 obj-$(CONFIG_COMMON_CLK_MT6755) += clk-mt6755-apmixedsys.o clk-mt6755-infrasys.o clk-mt6755-topckgen.o clk-mt6755-mfg.o
 obj-$(CONFIG_COMMON_CLK_MT6755_MMSYS) += clk-mt6755-mm.o
+obj-$(CONFIG_COMMON_CLK_MT6755_AUDIO) += clk-mt6755-audio.o
 obj-$(CONFIG_COMMON_CLK_MT6765) += clk-mt6765.o
 obj-$(CONFIG_COMMON_CLK_MT6765_AUDIOSYS) += clk-mt6765-audio.o
 obj-$(CONFIG_COMMON_CLK_MT6765_CAMSYS) += clk-mt6765-cam.o

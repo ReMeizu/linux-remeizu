@@ -26,6 +26,13 @@
 		pwms = <&disp_pwm0 0 50000>;
 	};
 
+	sound {
+		compatible = "mediatek,mt6737m-mt6328-sound";
+		model = "mt6737m-meizu-m5c";
+		mediatek,platform = <&afe>;
+		mediatek,audio-codec = <&mt6328_codec>;
+	};
+
 	chosen {
 		stdout-path = "serial0:921600n8";
 	};
@@ -277,5 +284,9 @@
 };
 
 &usb2phy {
+	status = "okay";
+};
+
+&afe {
 	status = "okay";
 };

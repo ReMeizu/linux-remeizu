@@ -589,6 +589,17 @@
 		max-microvolt = <3000000>;
 		min-microvolt = <3000000>;
 	};
+
+	sound {
+		compatible = "mediatek,mt6755-mt6351-sound";
+		model = "mt6755-meizu-m3note";
+		mediatek,platform = <&afe>;
+		mediatek,audio-codec = <&mt6351_codec>;
+	};
+};
+
+&afe {
+	status = "okay";
 };
 
 &pio {

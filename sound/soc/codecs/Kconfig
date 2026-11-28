@@ -2674,6 +2674,24 @@ config SND_SOC_ML26124
 	tristate
 	depends on I2C
 
+config SND_SOC_MT6328
+	tristate "MediaTek MT6328/MT6353 PMIC Codec"
+	help
+	  Enable support for the MediaTek MT6328 (MT6735/MT6737M) and
+	  MT6353 (MT6753/MT6750) PMIC audio codecs. Both parts expose the
+	  same PMIC audio register file; the driver supports the MTKAIF
+	  link to the SoC audio front-end, the DAC/headphone/loudspeaker/
+	  handset outputs and the ADC with three preamplifiers.
+
+config SND_SOC_MTK_ACCDET
+	tristate "MediaTek PMIC ACCDET headset jack detection"
+	depends on MTK_PMIC_WRAP
+	help
+	  Enable support for the ACCDET headset detection block found in
+	  the MT6328 and MT6353 PMICs (MT6735/MT6737M/MT6750/MT6753 phones).
+	  It reports headphones, headsets and hook-switch buttons through a
+	  standard ALSA jack to the sound card.
+
 config SND_SOC_MT6351
 	tristate "MediaTek MT6351 Codec"
 

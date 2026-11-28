@@ -665,6 +665,23 @@
 			status = "disabled";
 		};
 
+		afe: audio-controller@11220000 {
+			compatible = "mediatek,mt6735-audio";
+			reg = <0 0x11220000 0 0x1000>;
+			interrupts = <GIC_SPI 144 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&infracfg CLK_INFRA_AUDIO>,
+				 <&topckgen CLK_TOP_AUDIO_SEL>,
+				 <&topckgen CLK_TOP_AUDINTBUS_SEL>,
+				 <&topckgen CLK_TOP_SYSPLL1_D4>,
+				 <&clk26m>;
+			clock-names = "infra_sys_audio_clk",
+				      "top_mux_audio",
+				      "top_mux_aud_intbus",
+				      "top_sys_pll1_d4",
+				      "top_clk26m_clk";
+			status = "disabled";
+		};
+
 		mmc0: mmc@11230000 {
 			compatible = "mediatek,mt6735-mmc";
 			reg = <0 0x11230000 0 0x1000>;
