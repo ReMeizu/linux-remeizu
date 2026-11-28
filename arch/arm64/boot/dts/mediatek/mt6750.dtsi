@@ -297,8 +297,8 @@
 			     <GIC_SPI 217 IRQ_TYPE_LEVEL_LOW>,
 			     <GIC_SPI 216 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-names = "job", "mmu", "gpu";
-		clocks = <&mfgcfg CLK_MFG_BG3D>, <&topckgen CLK_TOP_MUX_MFG>;
-		clock-names = "core", "bus";
+		clocks = <&mfgcfg CLK_MFG_BG3D>;
+		clock-names = "core";
 		power-domains = <&spm MT6755_POWER_DOMAIN_MFG>;
 		operating-points-v2 = <&gpu_opp_table>;
 		status = "disabled";

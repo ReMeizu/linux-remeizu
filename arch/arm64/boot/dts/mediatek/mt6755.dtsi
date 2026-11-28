@@ -957,11 +957,11 @@
 		 * reg 0x13040000/0x4000, JOB=SPI218 MMU=SPI217 GPU=SPI216
 		 * (all LEVEL_LOW), clock mfgsys MFG_BG3D, 700 MHz.
 		 *
-		 * "bus" is the topckgen MFG mux: the mfgcfg gate drives it
-		 * through mfg_sel, so rate changes on the core clock propagate
-		 * up to the mux. The GPU rail is MT6351 BUCK_VGPU (the board
-		 * attaches it as "mfg-supply" when it is described); the OPP
-		 * table drives frequencies and, with a real supply, voltages.
+		 * Only the mfgcfg gate is listed: its parent is the composite
+		 * topckgen "mfg_sel" mux, which cannot propagate a rate from a
+		 * consumer, so devfreq retunes the GPU clock through the gate.
+		 * The GPU rail is MT6351 BUCK_VGPU, attached as "mfg-supply",
+		 * so the OPP table drives both frequency and voltage.
 		 */
 		compatible = "mediatek,mt6755-mali", "arm,mali-t860",
 			     "arm,mali-midgard";
@@ -970,8 +970,8 @@
 			     <GIC_SPI 217 IRQ_TYPE_LEVEL_LOW>,
 			     <GIC_SPI 216 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-names = "job", "mmu", "gpu";
-		clocks = <&mfgcfg CLK_MFG_BG3D>, <&topckgen CLK_TOP_MUX_MFG>;
-		clock-names = "core", "bus";
+		clocks = <&mfgcfg CLK_MFG_BG3D>;
+		clock-names = "core";
 		clock-frequency = <700000000>;
 		power-domains = <&spm MT6755_POWER_DOMAIN_MFG>;
 		operating-points-v2 = <&gpu_opp_table>;

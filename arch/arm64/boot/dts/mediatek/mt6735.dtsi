@@ -7,8 +7,8 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/clock/mediatek,mt6735-clk.h>
 #include <dt-bindings/clock/mediatek,mt6735-infracfg.h>
-#include <dt-bindings/clock/mediatek,mt6735-pericfg.h>
 #include <dt-bindings/clock/mediatek,mt6735-mfgcfg.h>
+#include <dt-bindings/clock/mediatek,mt6735-pericfg.h>
 #include <dt-bindings/clock/mediatek,mt6735-topckgen.h>
 #include <dt-bindings/pinctrl/mediatek,mt6735-pinctrl.h>
 #include <dt-bindings/phy/phy.h>
@@ -189,7 +189,7 @@
 				};
 
 				/*
-				 * Mali-T720MP2 MTCMOS.  Vendor:
+				 * Mali-T720MP2 MTCMOS. Vendor:
 				 * mt_spm.h:93 SPM_MFG_PWR_CON 0x214, SPM
 				 * PWR_STATUS bit 4, SRAM PDN GENMASK(11, 8)
 				 * with ack BIT(12) (mt_spm_mtcmos.c:1585-1660,
@@ -562,7 +562,10 @@
 		 *     interrupts SPI 212 (JOB) / 211 (MMU) / 210 (GPU), all
 		 *     LEVEL_LOW, clock-frequency 450 MHz, core clock gated by
 		 *     mfgcfg MFG_BG3D (clk-mt6735-mfgcfg.c, bit 0, parent
-		 *     mfg_sel), powered by the SPM MFG MTCMOS domain.
+		 *     mfg_sel), powered by the SPM MFG MTCMOS domain. The
+		 *     gate's "mfg_sel" parent is a composite mux, so it is
+		 *     not listed as a second (rate-propagating) clock here:
+		 *     the OPP rate changes land on the gate itself.
 		 *
 		 * MT6735/MT6737M have no SMI MMU (vendor uses SMI without
 		 * M4U on this generation), so no iommus property here.
@@ -592,8 +595,8 @@
 				     <GIC_SPI 211 IRQ_TYPE_LEVEL_LOW>,
 				     <GIC_SPI 210 IRQ_TYPE_LEVEL_LOW>;
 			interrupt-names = "job", "mmu", "gpu";
-			clocks = <&mfgcfg CLK_MFG_BG3D>, <&topckgen CLK_TOP_MFG_SEL>;
-			clock-names = "core", "bus";
+			clocks = <&mfgcfg CLK_MFG_BG3D>;
+			clock-names = "core";
 			power-domains = <&spm MT6735_POWER_DOMAIN_MFG>;
 			operating-points-v2 = <&gpu_opp_table>;
 			status = "disabled";
