@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/light/pa12203001.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TXC PA12203001 ambient light and proximity sensor
+
+maintainers:
+  - ReMeizu <maintainers@remeizu.org>
+
+description: |
+  The TXC PA12203001 combines a 16/18 bit ambient light sensor and a
+  proximity detector with an integrated IR LED, I2C address 0x1e.  The
+  driver has no interrupt support; the host polls the sensor.
+
+properties:
+  compatible:
+    const: txc,pa12203001
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+    description: Optional proximity/light threshold signal, currently unused.
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        light-sensor@1e {
+            compatible = "txc,pa12203001";
+            reg = <0x1e>;
+        };
+    };
+...

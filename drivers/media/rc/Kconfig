@@ -303,6 +303,19 @@ config IR_MTK
 	   To compile this driver as a module, choose M here: the
 	   module will be called mtk-cir.
 
+config IR_MTK_IRTX
+	tristate "MediaTek IR transmitter (IRTX)"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on RC_CORE
+	help
+	  Say Y if you want to use the MediaTek IR transmitter block (IRTX)
+	  that drives the on-board IR LED, for example on the MT6797 based
+	  Meizu MX6.  The driver exposes an rc-core transmit device (usable
+	  through LIRC or ir-ctl) and the vendor /dev/irtx character device.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called mtk-irtx.
+
 config IR_NUVOTON
 	tristate "Nuvoton w836x7hg Consumer Infrared Transceiver"
 	depends on PNP || COMPILE_TEST

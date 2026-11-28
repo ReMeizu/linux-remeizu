@@ -292,7 +292,13 @@
 		status = "disabled";
 	};
 
-	i2c0: i2c@11007000 {
+	/*
+	 * The vendor tree numbers this controller "i2c4" (its i2c-mtk.h
+	 * channel map), so the MTK-era device trees refer to it as i2c4; the
+	 * mainline node name follows the register block order.  Both labels
+	 * point at the same controller.
+	 */
+	i2c0: i2c_4: i2c@11007000 {
 		compatible = "mediatek,mt6797-i2c",
 			     "mediatek,mt6577-i2c";
 		reg = <0 0x11007000 0 0x1000>,
@@ -441,6 +447,50 @@
 			 <&infrasys CLK_INFRA_AP_DMA>;
 		clock-names = "main", "dma";
 		clock-div = <10>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	/*
+	 * IR transmitter.  The vendor tree describes it as irtx@1101d000 with
+	 * "mediatek,irtx", a "clk-irtx-main" clock, a PWM channel in memory
+	 * mode as the slot time base (pwm_ch = <3>) and the LED on GPIO137
+	 * (pad function IRTX_OUT, mode 5).  The vendor driver has no IRQ
+	 * handler beyond a stub, so no interrupt is described here.
+	 *
+	 * "clk-irtx-main" is the CLK_INFRA_IRTX gate whose parent is the
+	 * spi_sel mux; the IRTX carrier counter assumes 26 MHz, so the mux is
+	 * parked on clk26m (spi_sel parent 0).  The PWM block at 0x11006000 is
+	 * the slot time base; it is a second memory resource named "pwm" and
+	 * not a phandle to a PWM consumer because the driver programs it in
+	 * memory mode, not through the generic PWM API.
+	 */
+	irtx: irtx@1101d000 {
+		compatible = "mediatek,mt6797-irtx";
+		reg = <0 0x1101d000 0 0x1000>,
+		      <0 0x11006000 0 0x1000>;
+		reg-names = "irtx", "pwm";
+		clocks = <&infrasys CLK_INFRA_IRTX>;
+		clock-names = "clk-irtx-main";
+		assigned-clocks = <&topckgen CLK_TOP_MUX_SPI>;
+		assigned-clock-parents = <&clk26m>;
+		status = "disabled";
+	};
+
+	/*
+	 * SPI controller.  Only the SPI0 block (0x1100a000, GIC SPI 118) is
+	 * described: it is the one the stock MX6 device tree uses for the
+	 * Goodix fingerprint sensor.  The MT6797 block is register compatible
+	 * with the MT2701 generation ("mediatek,mt6797-spi" is matched by
+	 * spi-mt65xx with the common data).
+	 */
+	spi0: spi@1100a000 {
+		compatible = "mediatek,mt6797-spi", "mediatek,mt2701-spi";
+		reg = <0 0x1100a000 0 0x1000>;
+		interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&infrasys CLK_INFRA_SPI>;
+		clock-names = "main";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		status = "disabled";

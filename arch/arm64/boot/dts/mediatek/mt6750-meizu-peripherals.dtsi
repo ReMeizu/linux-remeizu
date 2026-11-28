@@ -1,0 +1,165 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Meizu MT6750/MT6753 board peripherals shared by M6, M6T, M3s and U10.
+ *
+ * The stock U10/M6 device tree (mt6750-meizu-m6.dts, see the board comment
+ * for the capture) wires these parts to the SoC buses:
+ *
+ *   i2c0 0x38  FocalTech FT5x26/FT5x46 touch controller, INT GPIO1, RST GPIO42
+ *   i2c0 0x3e  TI TPS65132 LCD bias
+ *   i2c1 0x68  InvenSense six-axis sensor (ICM206xx family)
+ *   i2c1 0x2c  QMC-X983 magnetometer
+ *   i2c1 0x49  EPL259X light/proximity
+ *   spi0 0     Goodix GF3208 fingerprint sensor (vendor FP HAL over spidev)
+ *
+ * What the mainline tree can bind:
+ *   FTC FT5x46   focaltech_tddi.c  (raw FT5x0x protocol)
+ *   ICM206xx     inv-mpu6050 only knows the parts it probes by WHO_AM_I
+ *   QMC-X983     no mainline IIO driver
+ *   EPL259X      no mainline IIO driver
+ *   TPS65132     tps65132-regulator.c
+ *
+ * The magnetometer and light/proximity parts are kept as disabled nodes: the
+ * addresses are stock facts, the drivers do not exist, and binding a driver
+ * that speaks a different register map only produces I2C timeouts.  The
+ * fingerprint sensor keeps its vendor compatible so no generic driver claims
+ * it; the FP HAL talks to /dev/spidev after the SPI0 controller of the board
+ * is enabled and its pads are muxed.
+ *
+ * Included after the SoC dtsi, the binding headers and the board's pinctrl
+ * node, from mt6750-meizu-m6.dts, mt6750-meizu-m6t.dts, mt6750-meizu-m3s.dts
+ * and mt6750-meizu-u10.dts.
+ */
+
+/* I2C1: sensor bus */
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins>;
+	clock-frequency = <100000>;
+	status = "okay";
+
+	/* QMC-X983 magnetometer of the M6 family (stock cust_mag@0, 0x2c). */
+	magnetometer@2c {
+		compatible = "qst,qmc6303";
+		reg = <0x2c>;
+		status = "disabled";
+	};
+
+	/*
+	 * EPL259X light/proximity at 0x49.  No mainline IIO driver knows the
+	 * part; the node documents the address for a future driver.
+	 */
+	light-sensor@49 {
+		compatible = "mediatek,epl259x";
+		reg = <0x49>;
+		status = "disabled";
+	};
+
+	/*
+	 * InvenSense six-axis part.  The stock cust_accel/@gyro nodes name
+	 * the vendor glue ("mpu6515g") without an address; the client nodes
+	 * inherit 0x68 from gyro@68.  inv-mpu6050 probes the concrete part
+	 * by WHO_AM_I, so the generic mpu6050 compatible is the honest
+	 * description.
+	 */
+	imu@68 {
+		compatible = "invensense,mpu6050";
+		reg = <0x68>;
+	};
+};
+
+/*
+ * Goodix GF3208 fingerprint sensor on SPI0.  Stock U10/M6 tree: a
+ * "goodix,goodix-fp" child of SPI0 with the vendor HAL driving it over
+ * spidev.  The controller is left disabled here: the pads (SPI0_MI/MO/CLK/CS)
+ * and the INT/RST lines differ per board and none of them is verified for
+ * 6.18 yet, and an enabled controller without correct pads only produces
+ * timeouts.  The child node documents the wiring for the board that enables
+ * the bus.
+ */
+&spi0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "disabled";
+
+	fingerprint@0 {
+		compatible = "goodix,goodix-fp";
+		reg = <0>;
+		spi-max-frequency = <500000>;
+		status = "okay";
+	};
+};
+
+&pio {
+	/*
+	 * Touch interrupt and reset.  INT on GPIO1 with the internal pull
+	 * disabled (stock ctp_pins_eint_as_int: bias-disable), reset on
+	 * GPIO42.  input-schmitt-enable is load-bearing on MTK pinctrl:
+	 * input-enable alone does not set the pad direction, and the IRQ
+	 * core refuses to take a pad that still reads as an output.
+	 */
+	ctp_pins: ctp-pins {
+		pins-int {
+			pinmux = <(MTK_PIN_NO(1) | 0)>;
+			input-enable;
+			input-schmitt-enable;
+			bias-disable;
+		};
+		pins-rst {
+			pinmux = <(MTK_PIN_NO(42) | 0)>;
+			bias-pull-up;
+		};
+	};
+
+	/* Touch/display bus pads: SDA0/SCL0 on GPIO92/93, mode 1. */
+	i2c0_pins: i2c0-pins {
+		pins-bus {
+			pinmux = <(MTK_PIN_NO(92) | 1)>,
+				 <(MTK_PIN_NO(93) | 1)>;
+			input-enable;
+			input-schmitt-enable;
+			bias-pull-up;
+		};
+	};
+
+	/*
+	 * Sensor bus pads: SDA1/SCL1 on GPIO91/94, mode 1.  The stock FORGE
+	 * bring-up enabled the internal pulls because the external ones alone
+	 * are too weak for the rise time of this bus.
+	 */
+	i2c1_pins: i2c1-pins {
+		pins-bus {
+			pinmux = <(MTK_PIN_NO(91) | 1)>,
+				 <(MTK_PIN_NO(94) | 1)>;
+			input-enable;
+			input-schmitt-enable;
+			bias-pull-up;
+		};
+	};
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins>;
+	clock-frequency = <100000>;
+	status = "okay";
+
+	/*
+	 * Touch controller on the shared display bus next to the TPS65132.
+	 * FT5x46 reports display-space coordinates (720x1280 on the U10/M6
+	 * class panels).
+	 */
+	touchscreen@38 {
+		compatible = "focaltech,ft5x46";
+		reg = <0x38>;
+		interrupt-parent = <&pio>;
+		interrupts = <1 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&pio 42 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ctp_pins>;
+		touchscreen-size-x = <720>;
+		touchscreen-size-y = <1280>;
+		focaltech,max-touch-number = <5>;
+		status = "okay";
+	};
+};

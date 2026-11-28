@@ -370,6 +370,26 @@ config TOUCHSCREEN_EXC3000
 	  To compile this driver as a module, choose M here: the
 	  module will be called exc3000.
 
+config TOUCHSCREEN_FOCALTECH_TDDI
+	tristate "FocalTech FT5x46/FT5x26/FT8716 TDDI touchscreen"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y here if you want support for the FocalTech FT5x46, FT5x26 and
+	  FT8716 TDDI capacitive touch controllers that sit on the same I2C bus
+	  as the panel bias chip (address 0x38).  Meizu uses them on the M3
+	  Note, U10/M6/M6T/M3s and the MX6 TDDI panel; they speak the
+	  register/event protocol of the FT5x0x family and need neither a
+	  firmware upload nor factory calibration at runtime.
+
+	  Unlike TOUCHSCREEN_EDT_FT5X06 this driver trusts the device tree for
+	  the controller model instead of probing the identification
+	  registers, and adds an ESD watchdog plus suspend/resume power
+	  handling.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called focaltech_tddi.
+
 config TOUCHSCREEN_FUJITSU
 	tristate "Fujitsu serial touchscreen"
 	select SERIO
