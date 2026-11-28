@@ -67,7 +67,13 @@
 			no-map;
 		};
 
-		modem {
+		/*
+		 * MD1 cellular modem DRAM: firmware image plus the shared
+		 * memory window in one contiguous extents (vendor
+		 * reserve-memory-ccci_md1 size = md_size+smem_size,
+		 * 0x3810000 bytes). Linux must never allocate from it.
+		 */
+		modem-md1 {
 			size = <0 0x3810000>;
 			alignment = <0 0x2000000>;
 			alloc-ranges = <0 0x40000000 0 0xc0000000>;
@@ -86,6 +92,14 @@
 			alloc-ranges = <0 0x80000000 0 0x3f330000>;
 		};
 	};
+};
+
+/*
+ * MD1 cellular modem. The CLDMA and CCIF blocks come from the mt6735.dtsi
+ * node; this board only has to enable it, the transport clocks are optional.
+ */
+&mdcldma {
+	status = "okay";
 };
 
 /*

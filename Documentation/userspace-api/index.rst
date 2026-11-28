@@ -53,6 +53,7 @@ Devices and I/O
    dcdbas
    vduse
    isapnp
+   mtk_ccci
 
 Everything else
 ===============

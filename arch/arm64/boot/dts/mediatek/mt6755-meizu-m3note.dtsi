@@ -54,13 +54,24 @@
 		};
 
 		/*
-		 * r94: ccci-md1 (161 MiB) + ccci-share (6 MiB) RECLAIMED. These
-		 * carved out the cellular modem's shared DRAM, but mainline has no
-		 * eccci/modem driver (the MD coprocessor never boots — no md1img
-		 * load), so the region is just idle DRAM. Removing the nodes hands
-		 * 167 MiB back to Linux (MemTotal 1.52 -> ~1.68 GiB). If a modem
-		 * bring-up is ever attempted, restore these first.
+		 * MD1 modem DRAM (160 MiB of firmware space) and the 6 MiB
+		 * shared memory window ccci_fsd maps: vendor
+		 * reserve-memory-ccci_md1 / ccci_share sizes. Both are taken
+		 * out of the page allocator, the ECCCI driver programs the MD
+		 * with these addresses and loads the firmware into the first.
 		 */
+		modem-md1 {
+			size = <0 0xa100000>;
+			alignment = <0 0x2000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
+		modem-share {
+			size = <0 0x600000>;
+			alignment = <0 0x4000000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+			no-map;
+		};
 
 		spm-reserved {
 			no-map;
@@ -850,13 +861,24 @@
 };
 
 &gpu {
+	status = "okay";
+};
 
- /*
+/*
  * Integrated CONSYS (Wi-Fi/BT/GPS).  The MCU clock gate and the top AXI
  * protection block are owned by the firmware until the kernel takes the
  * subsystem over through /dev/wmtdetect, so the node stays disabled until
  * the connectivity stack is brought up by userspace.
  */
 &connsys {
+	status = "okay";
+};
+
+/*
+ * MD1 cellular modem. Register windows and interrupts come from mt6755.dtsi;
+ * the clocks are the CCIF AP/MD gates plus the CLDMA bclk gate.
+ */
+&mdcldma {
+	vmodem-supply = <&mt6351_vcore>;
 	status = "okay";
 };

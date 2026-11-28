@@ -22,6 +22,28 @@
 	/* LK must provide the actual DRAM and reserved-memory layout. */
 
 	/*
+	 * MD1 cellular modem DRAM and the shared memory window, vendor
+	 * reserve-memory-ccci_md1 / ccci_share sizes. The ECCCI driver loads
+	 * the firmware into the first region and programs the MD with its
+	 * address, so it must never be handed to the page allocator.
+	 */
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		modem-md1 {
+			size = <0 0xa100000>;
+			no-map;
+		};
+
+		modem-share {
+			size = <0 0x600000>;
+			no-map;
+		};
+	};
+
+	/*
 	 * VBUS for the USB Type-C port. The stock board drives the port
 	 * through the SoC USB_DRVVBUS pin function (GPIO94 in the vendor DTS
 	 * pinctrl states "drvvbus_low"/"drvvbus_high"), not through a GPIO
@@ -292,13 +314,23 @@
 };
 
 &gpu {
+	status = "okay";
+};
 
- /*
+/*
  * Integrated CONSYS (Wi-Fi/BT/GPS).  The MCU clock gate and the top AXI
  * protection block are owned by the firmware until the kernel takes the
  * subsystem over through /dev/wmtdetect, so the node stays disabled until
  * the connectivity stack is brought up by userspace.
  */
 &connsys {
+	status = "okay";
+};
+
+/*
+ * MD1 cellular modem: CLDMA rings plus the CCIF doorbell. Register windows
+ * and interrupts come from mt6797.dtsi.
+ */
+&mdcldma {
 	status = "okay";
 };

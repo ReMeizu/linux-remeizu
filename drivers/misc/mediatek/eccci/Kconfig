@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# MediaTek MD1 cellular modem (ECCCI)
+
+config MTK_ECCCI
+	tristate "MediaTek MD1 cellular modem (ECCCI)"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on ARM64 || COMPILE_TEST
+	select FW_LOADER
+	help
+	  Say Y here to enable the ECCCI driver suite for the MD1 cellular
+	  modem found in the MediaTek MT6735/MT6737M, MT6750/MT6753/MT6755
+	  and MT6797 SoCs.
+
+	  The suite covers the CLDMA DMA rings used to carry CCCI packets
+	  between the AP and the modem, the CCIF doorbell, the character
+	  ports (/dev/ccci_fs, /dev/ttyC0, /dev/ttyC1, /dev/ccci_monitor,
+	  /dev/ccci_ioctl0..4, /dev/ccci_ipc_* and /dev/ccci_aud) and the
+	  ccmni0..ccmni7 network interfaces that carry the cellular IP
+	  bearers.
+
+	  The modem firmware is loaded from "modem_1_wg_n.img" through the
+	  firmware loader, the optional companion DSP image from
+	  "dsp_1_wg_n.bin".
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called mtk_eccci.
+
+config MTK_ECCCI_DEBUG
+	bool "ECCCI verbose register and packet tracing"
+	depends on MTK_ECCCI
+	help
+	  Enable the dev_dbg() traces of the CLDMA and port layers. They are
+	  very verbose, only enable them while debugging a modem bring-up.

@@ -80,9 +80,10 @@
 		/*
 		 * Modem/connectivity reservations, sizes from the stock DTS
 		 * (m6t.dts reserve-memory-ccci_md1, reserve-memory-ccci_share,
-		 * consys-reserve-memory, spm-reserve-memory).  The modem is
-		 * not driven by this kernel, but its firmware may still be
-		 * live when Linux boots.
+		 * consys-reserve-memory, spm-reserve-memory). The ECCCI modem
+		 * driver loads its firmware into modem-md1 and ccci_fsd maps
+		 * modem-share, so neither region may reach the page
+		 * allocator.
 		 */
 		modem-md1 {
 			size = <0 0xa100000>;
@@ -208,12 +209,20 @@
 	};
 };
 
- /*
+/*
  * Integrated CONSYS (Wi-Fi/BT/GPS).  The MCU clock gate and the top AXI
  * protection block are owned by the firmware until the kernel takes the
  * subsystem over through /dev/wmtdetect, so the node stays disabled until
  * the connectivity stack is brought up by userspace.
  */
 &connsys {
+	status = "okay";
+};
+
+/*
+ * MD1 cellular modem: CLDMA rings plus the CCIF doorbell, registers from
+ * mt6755.dtsi.
+ */
+&mdcldma {
 	status = "okay";
 };
