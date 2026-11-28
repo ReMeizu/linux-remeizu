@@ -335,12 +335,12 @@ out:
 
 static int pa12203001_probe(struct i2c_client *client)
 {
+	struct device *dev = &client->dev;
 	struct pa12203001_data *data;
 	struct iio_dev *indio_dev;
 	int ret;
 
-	indio_dev = devm_iio_device_alloc(&client->dev,
-					  sizeof(struct pa12203001_data));
+	indio_dev = devm_iio_device_alloc(dev, sizeof(struct pa12203001_data));
 	if (!indio_dev)
 		return -ENOMEM;
 
@@ -350,7 +350,8 @@ static int pa12203001_probe(struct i2c_client *client)
 
 	data->map = devm_regmap_init_i2c(client, &pa12203001_regmap_config);
 	if (IS_ERR(data->map))
-		return PTR_ERR(data->map);
+		return dev_err_probe(dev, PTR_ERR(data->map),
+				     "failed to allocate register map\n");
 
 	mutex_init(&data->lock);
 
@@ -463,11 +464,18 @@ static const struct i2c_device_id pa12203001_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, pa12203001_id);
 
+static const struct of_device_id pa12203001_of_match[] __maybe_unused = {
+	{ .compatible = "txc,pa12203001" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, pa12203001_of_match);
+
 static struct i2c_driver pa12203001_driver = {
 	.driver = {
 		.name = PA12203001_DRIVER_NAME,
 		.pm = &pa12203001_pm_ops,
 		.acpi_match_table = pa12203001_acpi_match,
+		.of_match_table = pa12203001_of_match,
 	},
 	.probe = pa12203001_probe,
 	.remove = pa12203001_remove,

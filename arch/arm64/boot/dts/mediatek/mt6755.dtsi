@@ -754,6 +754,23 @@
 			status = "disabled";
 		};
 
+		/*
+		 * SPI0 (base 0x1100a000, GIC SPI 118, INFRA_SPI0 gate), used
+		 * by the Goodix fingerprint sensor on all MT6755/MT6750 boards.
+		 * spi-mt65xx matches it through the "mediatek,mt6797-spi"
+		 * entry, i.e. the common timing path.
+		 */
+		spi0: spi@1100a000 {
+			compatible = "mediatek,mt6797-spi", "mediatek,mt2701-spi";
+			reg = <0 0x1100a000 0 0x1000>;
+			interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&infrasys CLK_INFRA_SPI0>;
+			clock-names = "main";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
 		i2c3: i2c@1100f000 {
 			compatible = "mediatek,mt6755-i2c",
 				     "mediatek,mt8173-i2c";

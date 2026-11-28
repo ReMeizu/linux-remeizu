@@ -4,6 +4,7 @@
 #include <dt-bindings/input/input.h>
 
 #include "mt6797.dtsi"
+#include "mt6797-meizu-mx6-peripherals.dtsi"
 
 / {
 	model = "Meizu MX6";
@@ -80,7 +81,32 @@
 		pwms = <&disp_pwm0 0 35310>;
 		/* Policy default, not a hardware value. */
 		default-brightness-level = <128>;
+		/*
+		 * The stock leds driver and the Flyme HAL work in 0..255
+		 * (max_brightness 255); interpolate a fine table over the
+		 * 1024-cycle PWM period so no step is lost in the DAC.
+		 */
+		brightness-levels = <0 255>;
+		num-interpolated-steps = <255>;
 	};
+
+	/*
+	 * Vibrator. The stock MX6 tree describes it as
+	 *   vibrator0 { compatible = "mediatek,vibrator"; vib_timer = <25>;
+	 *               vib_limit = <9>; vib_vol = <5>; }
+	 * i.e. the coin motor sits on the MT6351 VIBR LDO, set to level 5.
+	 * regulator-haptic drives it through the regulator API; the vibrator
+	 * node is kept below only as documentation of the stock values, no
+	 * mainline driver binds "mediatek,vibrator" (the vendor driver is a
+	 * /sys/kernel/vibrator ioctl shim, not an input device).
+	 */
+	vibrator {
+		compatible = "regulator-haptic";
+		haptic-supply = <&mt6351_vibr>;
+		max-microvolt = <3000000>;
+		min-microvolt = <3000000>;
+	};
+
 
 	vddi18: regulator-vddi18 {
 		compatible = "regulator-fixed";
@@ -210,6 +236,17 @@
 			 */
 			mt6351_vgpu: buck-vgpu {
 				regulator-name = "vgpu";
+			};
+
+			/*
+			 * VIBR LDO for the coin motor (stock vib_vol = 5 ->
+			 * 3.0 V).  Possibly unused: regulator-haptic enables it
+			 * only while the motor runs.
+			 */
+			mt6351_vibr: ldo-vibr {
+				regulator-name = "vibr";
+				regulator-min-microvolt = <3000000>;
+				regulator-max-microvolt = <3000000>;
 			};
 		};
 	};

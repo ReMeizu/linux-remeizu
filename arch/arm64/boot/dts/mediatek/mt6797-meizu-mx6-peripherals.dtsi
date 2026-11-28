@@ -1,0 +1,193 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Meizu MX6 (M95) peripherals: touch, IMU, light/proximity, IR transmitter.
+ *
+ * Every value below comes from the stock 3.18 device tree
+ * (arch/arm64/boot/dts/meizu6797_6c_m.dts) and the drivers it selects:
+ *
+ *   touch     Mz_ft8716/focaltech_core.c  i2c1 0x38, INT GPIO68 (EINT7,
+ *             falling), RST GPIO211, reset 20 ms low / 300 ms high
+ *   IRTX      mt_irtx.c @ 0x1101d000, GPIO137 pad function 5 (IRTX_OUT)
+ *   sensors   listed at the bottom of the stock tree as cust_* nodes
+ *
+ * Kept out of mt6797-meizu-mx6.dts because it is a self-contained group of
+ * i2c1/IRTX peripherals sharing the board's pinctrl states.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&pio {
+	/* INT = EINT7 (GPIO68). Stock: input, pull-up, no drive. */
+	mx6_ctp_int_pins: mx6-ctp-int-pins {
+		pins-int {
+			pinmux = <MT6797_GPIO68__FUNC_EINT7>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+
+	/* RST = GPIO211, driven by the driver. */
+	mx6_ctp_rst_pins: mx6-ctp-rst-pins {
+		pins-rst {
+			pinmux = <MT6797_GPIO211__FUNC_GPIO211>;
+		};
+	};
+
+	/*
+	 * APDS9922 interrupt = GPIO85, which is EINT8 on MT6797 (the stock
+	 * node writes EINT 85, the flattened virtual number). Stock pull-up.
+	 */
+	mx6_alsps_int_pins: mx6-alsps-int-pins {
+		pins-int {
+			pinmux = <MT6797_GPIO85__FUNC_EINT8>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+
+	/*
+	 * ICM20645 / LSM6DS3-class IMU interrupt = GPIO63. The stock
+	 * "gyro_intpin_cfg" claims EINT2 on GPIO63, but on MT6797 GPIO63 is
+	 * EINT24; the board works either way because the line is only used
+	 * for hardware timestamping and the driver runs in polling mode.
+	 * It is described as a plain GPIO input so no EINT mapping is baked
+	 * in, and the IMU nodes below leave the interrupt out.
+	 */
+	mx6_imu_int_pins: mx6-imu-int-pins {
+		pins-int {
+			pinmux = <MT6797_GPIO63__FUNC_GPIO63>;
+			input-enable;
+			bias-pull-down;
+		};
+	};
+
+	/* IR LED pad: mode 0 = plain GPIO, mode 5 = IRTX_OUT. */
+	mx6_irtx_gpio_default: mx6-irtx-gpio-default {
+		pins-gpio {
+			pinmux = <MT6797_GPIO137__FUNC_GPIO137>;
+		};
+	};
+
+	mx6_irtx_gpio_led_set: mx6-irtx-gpio-led-set {
+		pins-irtx {
+			pinmux = <MT6797_GPIO137__FUNC_IRTX_OUT>;
+		};
+	};
+};
+
+/*
+ * Touch panel: FocalTech FT8716, the touch half of the TDDI panel that the
+ * stock tree also drives as the LCM (ft8716_fhd_vdo_sharp).  The stock
+ * driver coerces the address to 0x38 regardless of what the board node
+ * says (focaltech_core.c:1094), and its probe pulses reset before the
+ * first register read, so the node needs only reset/irq lines and the
+ * panel resolution.
+ */
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mx6_i2c1_pins>;
+	clock-frequency = <400000>;
+	status = "okay";
+
+	touchscreen@38 {
+		compatible = "focaltech,ft8716-tddi";
+		reg = <0x38>;
+
+		interrupt-parent = <&pio>;
+		interrupts = <68 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "irq";
+		reset-gpios = <&pio 211 GPIO_ACTIVE_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&mx6_ctp_int_pins>, <&mx6_ctp_rst_pins>;
+
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <1920>;
+		focaltech,max-touch-number = <5>;
+
+		/* Stock vtouch rail: a pinctrl-driven regulator (tpvddi). */
+		vcc-supply = <&vddi18>;
+	};
+};
+
+/*
+ * IMU and light/proximity.
+ *
+ * The stock MX6 tree ends with a mix of two device-tree styles: the
+ * "sensor standardization" cust_accel@0/cust_alsps@0/cust_mag@0/cust_gyro@0
+ * nodes say i2c_num = 1 with ICM20645 (accel 0x68, gyro 0x69), CM36558 ALS/PS
+ * at 0x51 and AK09912 at 0x0c, while the explicit apds9922@53/lsm6ds3@6a
+ * nodes hang off &i2c1 of the SoC multipurpose bus.
+ *
+ * Two facts decide what can be described honestly:
+ *
+ *  - The ICM20645 parts at 0x68/0x69 have no mainline driver (the closest
+ *    part, inv-mpu6050, checks WHO_AM_I and the 20645 answers 0xE0, not the
+ *    0xAE of the ICM20608D it knows).  Binding them to any mainline driver
+ *    would be a probe that always fails, so they are left out of the tree.
+ *  - CM36558 and AK09912 do have mainline drivers (capella,cm36651 must
+ *    not be confused with cm36558, and ak09911 is a different part), so
+ *    they are left out too.
+ *
+ * What is left are the two parts that do have a mainline driver with a
+ * matching compatible:
+ *   APDS-9922 at 0x53 on i2c1 (drivers/iio/light/apds9922.c)
+ *   ST LSM6DS3 at 0x6a on i2c1 (drivers/iio/imu/st_lsm6dsx)
+ * Both addresses are taken verbatim from the stock board tree.
+ */
+&i2c1 {
+	/* Light and proximity. */
+	light-sensor@53 {
+		compatible = "avago,apds9922";
+		reg = <0x53>;
+
+		interrupt-parent = <&pio>;
+		interrupts = <85 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "irq";
+		pinctrl-names = "default";
+		pinctrl-0 = <&mx6_alsps_int_pins>;
+
+		vdd-supply = <&vddi18>;
+	};
+
+	/* 6-axis IMU. */
+	imu@6a {
+		compatible = "st,lsm6ds3";
+		reg = <0x6a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&mx6_imu_int_pins>;
+
+		/* INT1 is wired to GPIO63 but has no mainline use (see above). */
+		mount-matrix = "0", "-1", "0",
+			       "1", "0", "0",
+			       "0", "0", "1";
+	};
+};
+
+/*
+ * IR transmitter. The IRTX block lives at 0x1101d000 and the LED sits on
+ * GPIO137 (pad function IRTX_OUT, mode 5). The block uses PWM channel 3 as
+ * its slot time base and runs from the 26 MHz infra_irtx gate (the stock
+ * driver's clk_irtx_main), which is the MT6797 spi_sel clock gated into the
+ * IRTX block.
+ *
+ * GPIO137 is left in GPIO mode at rest; the driver switches the pad to
+ * IRTX_OUT only while a frame is being sent (stock switch_irtx_gpio()).
+ */
+&pio {
+	mx6_i2c1_pins: mx6-i2c1-pins {
+		pins-bus {
+			pinmux = <MT6797_GPIO55__FUNC_SCL1_0>,
+				 <MT6797_GPIO56__FUNC_SDA1_0>;
+			bias-pull-up;
+			drive-strength = <MTK_DRIVE_4mA>;
+		};
+	};
+};
+
+&irtx {
+	pinctrl-names = "irtx_gpio_default", "irtx_gpio_led_set";
+	pinctrl-0 = <&mx6_irtx_gpio_default>;
+	pinctrl-1 = <&mx6_irtx_gpio_led_set>;
+	status = "okay";
+};

@@ -202,6 +202,105 @@
 	};
 
 	/*
+	 * I2C controllers.  MT6750 reuses the MT6755 I2C IP ("mt8173-i2c"
+	 * generation: auto-restart plus aux length register), bases and AP-DMA
+	 * channels per the stock MT6755 tree:
+	 *   i2c0 0x11007000, DMA 0x11000100, GIC SPI 84
+	 *   i2c1 0x11008000, DMA 0x11000180, GIC SPI 85
+	 *   i2c2 0x11009000, DMA 0x11000200, GIC SPI 86
+	 *   i2c3 0x1100f000, DMA 0x11000280, GIC SPI 87
+	 * The clocks are the INFRA_I2C* gates plus the shared AP-DMA gate.
+	 */
+	i2c0: i2c@11007000 {
+		compatible = "mediatek,mt6755-i2c", "mediatek,mt8173-i2c";
+		reg = <0 0x11007000 0 0x1000>,
+		      <0 0x11000100 0 0x80>;
+		interrupts = <GIC_SPI 84 IRQ_TYPE_LEVEL_LOW>;
+		clock-div = <10>;
+		clocks = <&infrasys CLK_INFRA_I2C0>,
+			 <&infrasys CLK_INFRA_AP_DMA>;
+		clock-names = "main", "dma";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	i2c1: i2c@11008000 {
+		compatible = "mediatek,mt6755-i2c", "mediatek,mt8173-i2c";
+		reg = <0 0x11008000 0 0x1000>,
+		      <0 0x11000180 0 0x80>;
+		interrupts = <GIC_SPI 85 IRQ_TYPE_LEVEL_LOW>;
+		clock-div = <10>;
+		clocks = <&infrasys CLK_INFRA_I2C1>,
+			 <&infrasys CLK_INFRA_AP_DMA>;
+		clock-names = "main", "dma";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	i2c2: i2c@11009000 {
+		compatible = "mediatek,mt6755-i2c", "mediatek,mt8173-i2c";
+		reg = <0 0x11009000 0 0x1000>,
+		      <0 0x11000200 0 0x80>;
+		interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL_LOW>;
+		clock-div = <10>;
+		clocks = <&infrasys CLK_INFRA_I2C2>,
+			 <&infrasys CLK_INFRA_AP_DMA>;
+		clock-names = "main", "dma";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	i2c3: i2c@1100f000 {
+		compatible = "mediatek,mt6755-i2c", "mediatek,mt8173-i2c";
+		reg = <0 0x1100f000 0 0x1000>,
+		      <0 0x11000280 0 0x80>;
+		interrupts = <GIC_SPI 87 IRQ_TYPE_LEVEL_LOW>;
+		clock-div = <10>;
+		clocks = <&infrasys CLK_INFRA_I2C3>,
+			 <&infrasys CLK_INFRA_AP_DMA>;
+		clock-names = "main", "dma";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	/*
+	 * SPI0, used by the Goodix fingerprint sensor on every MT6750 board.
+	 * The block is the MT6755 one (base 0x1100a000, GIC SPI 118, INFRA_SPI
+	 * gate); spi-mt65xx drives it through the "mediatek,mt6797-spi"
+	 * entry, i.e. the common timing path without the newer timing
+	 * extension registers.
+	 */
+	spi0: spi@1100a000 {
+		compatible = "mediatek,mt6797-spi", "mediatek,mt2701-spi";
+		reg = <0 0x1100a000 0 0x1000>;
+		interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&infrasys CLK_INFRA_SPI0>;
+		clock-names = "main";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	/*
+	 * Keypad matrix.  Same MTK KP block as MT6755: keypad@10010000, GIC
+	 * SPI 164 edge-falling, INFRA_KP gate.  The volume keys of the MT6750
+	 * boards are matrix keys on row 0; the power and home keys are PMIC
+	 * inputs and live in the board files.
+	 */
+	keypad: keypad@10010000 {
+		compatible = "mediatek,mt6779-keypad";
+		reg = <0 0x10010000 0 0x1000>;
+		interrupts = <GIC_SPI 164 IRQ_TYPE_EDGE_FALLING>;
+		clocks = <&infrasys CLK_INFRA_KP>;
+		clock-names = "kpd";
+		status = "disabled";
+	};
+
+	/*
 	 * PMIC wrapper and eMMC controller for the storage path.
 	 *
 	 * Values are copied from the stock MT6750 3.18 tree that Meizu's

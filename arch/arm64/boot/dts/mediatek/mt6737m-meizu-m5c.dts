@@ -233,19 +233,23 @@
 
 	/*
 	 * GT9XXTB touch.  Vendor: i2c1 0x5d, EINT GPIO62, reset GPIO10.
-	 * UNPROVEN: exact GT9xxx chip ID string; the mainline goodix driver
-	 * reads it at runtime, so gt911 is only the match fallback and the
-	 * regulator rails are assumed (vendor uses VGP1 for vtouch).
+	 * The mainline goodix driver reads the id string at runtime
+	 * ("GT9XXTB..." on this panel), so gt911 is only the match fallback.
+	 * reset-gpios and irq-gpios are ACTIVE_HIGH because the goodix driver
+	 * drives both lines freely during its reset/address-strap sequence.
 	 */
 	touchscreen@5d {
 		compatible = "goodix,gt9xx", "goodix,gt911";
 		reg = <0x5d>;
 		interrupt-parent = <&pio>;
 		interrupts = <62 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "irq";
 		irq-gpios = <&pio 62 GPIO_ACTIVE_HIGH>;
 		reset-gpios = <&pio 10 GPIO_ACTIVE_HIGH>;
 		AVDD28-supply = <&mt6328_vgp1_reg>;
 		VDDIO-supply = <&mt6328_vio18_reg>;
+		touchscreen-size-x = <720>;
+		touchscreen-size-y = <1280>;
 	};
 
 };

@@ -1556,6 +1556,13 @@ static const struct of_device_id goodix_of_match[] = {
 	{ .compatible = "goodix,gt928" },
 	{ .compatible = "goodix,gt9286" },
 	{ .compatible = "goodix,gt967" },
+	/*
+	 * Generic name the Meizu BSPs use for every GT9xx/GT1xx panel,
+	 * including the GT915L on the m681/l681 and the GT9xx on the m5c,
+	 * whose id strings ("915L_3006", "911_...") are matched at runtime by
+	 * goodix_read_version() and mapped to the GT9x register layout.
+	 */
+	{ .compatible = "goodix,gt9xx" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, goodix_of_match);

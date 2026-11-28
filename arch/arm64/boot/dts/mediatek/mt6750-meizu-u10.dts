@@ -3,6 +3,8 @@
 
 #include "mt6750.dtsi"
 #include <dt-bindings/pinctrl/mt65xx.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 / {
 	model = "Meizu U10";
@@ -156,3 +158,9 @@
 &connsys {
 	status = "okay";
 };
+
+/*
+ * Touch, sensors and fingerprint bus.  Appended after the board node and
+ * binding headers above.
+ */
+#include "mt6750-meizu-peripherals.dtsi"
