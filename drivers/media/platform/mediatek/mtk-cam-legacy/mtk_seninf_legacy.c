@@ -415,7 +415,6 @@ static int mtk_seninf_register_port(struct mtk_cam_legacy *cam,
  */
 int mtk_seninf_init(struct mtk_cam_legacy *cam)
 {
-	struct fwnode_handle *child;
 	unsigned int n = 0;
 
 	fwnode_for_each_child_node_scoped(dev_fwnode(cam->dev), child) {

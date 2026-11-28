@@ -4,10 +4,10 @@
  *
  * Copyright (C) 2026 Meizu fleet kernel port
  *
- * This is the top-level driver of the camera capture path: it maps the SENINF
- * (CSI-2 receiver) and CamSV (DMA capture) register windows described by the
- * device tree, registers the V4L2 and media devices, collects the sensors
- * through a V4L2 async notifier and builds the media graph
+ * Top-level driver of the capture path: it maps the SENINF (CSI-2 receiver)
+ * register window described by the device tree, registers the V4L2 and media
+ * devices, collects the sensors through a V4L2 async notifier and builds the
+ * media graph
  *
  *   sensor ------> seninf port ------> camsv (/dev/videoN)
  *
@@ -51,16 +51,11 @@ static const struct mtk_cam_legacy_soc mt6797_cam = {
  * Media graph construction
  * ------------------------------------------------------------------------ */
 
-/*
- * By the time the last sensor probes, the seninf ports and the CamSV video
- * nodes are registered, so the whole graph can be created and (if all
- * required sensors are present) registered with userspace.
- */
 static bool mtk_cam_legacy_graph_is_complete(struct mtk_cam_legacy *cam)
 {
 	unsigned int i;
 
-	if (cam->num_sensors < cam->num_ports)
+	if (!cam->num_ports)
 		return false;
 
 	for (i = 0; i < cam->num_ports; i++) {
@@ -72,7 +67,7 @@ static bool mtk_cam_legacy_graph_is_complete(struct mtk_cam_legacy *cam)
 			return false;
 	}
 
-	return cam->num_ports > 0;
+	return true;
 }
 
 static int mtk_cam_legacy_build_graph(struct mtk_cam_legacy *cam)
@@ -134,6 +129,8 @@ static int mtk_cam_legacy_build_graph(struct mtk_cam_legacy *cam)
 		}
 	}
 
+	cam->graph_built = true;
+
 	dev_info(cam->dev,
 		 "%s camera graph registered: %u seninf ports, %u CamSV engines\n",
 		 cam->soc->name, cam->num_ports, cam->num_camsv);
@@ -148,8 +145,9 @@ err_nodes:
 }
 
 /*
- * Map a sensor sub-device to the seninf port it is wired to.  The port is
- * given by the parent port node's "reg" of the sensor's endpoint.
+ * Map a sensor sub-device to the seninf port it is wired to.  The port is the
+ * parent of the seninf endpoint whose remote end is the sensor, and its index
+ * is the "reg" of that port node.
  */
 static struct mtk_seninf_port *
 mtk_cam_legacy_port_for_sensor(struct mtk_cam_legacy *cam,
@@ -189,12 +187,10 @@ mtk_cam_legacy_port_for_sensor(struct mtk_cam_legacy *cam,
 			}
 		}
 
-		if (port && !port->sensor_sd) {
-			fwnode_handle_put(ep);
-			return port;
-		}
-
 		fwnode_handle_put(ep);
+
+		if (port && !port->sensor_sd)
+			return port;
 	}
 
 	return NULL;
@@ -210,13 +206,16 @@ static int mtk_cam_legacy_notifier_bound(struct v4l2_async_notifier *notifier,
 	struct mtk_seninf_port *port = mtk_cam_legacy_port_for_sensor(cam, sd);
 
 	if (!port) {
-		dev_warn(cam->dev, "sensor %s is not connected to a seninf port\n",
+		dev_warn(cam->dev,
+			 "sensor %s is not connected to a seninf port\n",
 			 sd->name);
 		return -ENODEV;
 	}
 
 	port->sensor_sd = sd;
-	cam->sensors[cam->num_sensors++] = sd;
+	if (cam->sensors)
+		cam->sensors[cam->num_sensors] = sd;
+	cam->num_sensors++;
 
 	dev_dbg(cam->dev, "sensor %s bound to seninf-%u\n", sd->name,
 		port->index);
@@ -232,8 +231,11 @@ static int mtk_cam_legacy_notifier_complete(struct v4l2_async_notifier *notifier
 
 	guard(mutex)(&cam->lock);
 
-	if (!mtk_cam_legacy_graph_is_complete(cam))
+	if (!mtk_cam_legacy_graph_is_complete(cam)) {
+		dev_warn(cam->dev,
+			 "camera graph incomplete, video nodes not registered\n");
 		return 0;
+	}
 
 	return mtk_cam_legacy_build_graph(cam);
 }
@@ -243,11 +245,6 @@ static const struct v4l2_async_notifier_operations mtk_cam_legacy_notifier_ops =
 	.complete = mtk_cam_legacy_notifier_complete,
 };
 
-/*
- * Only the sensor side of a seninf port carries a link frequency list in the
- * conventional way; use the CamSV/port links to find the sensors through our
- * own graph instead of walking the endpoints blindly.
- */
 static int mtk_cam_legacy_register_sensors(struct mtk_cam_legacy *cam)
 {
 	unsigned int i;
@@ -313,18 +310,19 @@ static int mtk_cam_legacy_probe(struct platform_device *pdev)
 	if (IS_ERR(cam->seninf_base))
 		return PTR_ERR(cam->seninf_base);
 
-	strscpy(cam->v4l2_dev.name, "mtk-cam-legacy",
+	strscpy(cam->v4l2_dev.name, MTK_CAM_DRV_NAME,
 		sizeof(cam->v4l2_dev.name));
 	ret = v4l2_device_register(dev, &cam->v4l2_dev);
 	if (ret)
 		return ret;
 
 	cam->media_dev.dev = dev;
-	strscpy(cam->media_dev.model, "MediaTek camera",
-		sizeof(cam->media_dev.model));
+	snprintf(cam->media_dev.model, sizeof(cam->media_dev.model),
+		 "MediaTek %s camera", cam->soc->name);
+	strscpy(cam->media_dev.driver_name, MTK_CAM_DRV_NAME,
+		sizeof(cam->media_dev.driver_name));
 	snprintf(cam->media_dev.bus_info, sizeof(cam->media_dev.bus_info),
 		 "platform:%s", dev_name(dev));
-	cam->media_dev.hw_revision = 0;
 	media_device_init(&cam->media_dev);
 	cam->v4l2_dev.mdev = &cam->media_dev;
 
@@ -336,33 +334,29 @@ static int mtk_cam_legacy_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_seninf;
 
+	cam->sensors = devm_kcalloc(dev, cam->num_ports,
+				    sizeof(*cam->sensors), GFP_KERNEL);
+	if (!cam->sensors) {
+		ret = -ENOMEM;
+		goto err_camsv;
+	}
+
 	ret = mtk_cam_legacy_register_sensors(cam);
 	if (ret)
 		goto err_camsv;
 
 	platform_set_drvdata(pdev, cam);
 
-	cam->sensors = devm_kcalloc(dev, cam->num_ports,
-				    sizeof(*cam->sensors), GFP_KERNEL);
-	if (!cam->sensors) {
-		ret = -ENOMEM;
-		goto err_nf;
-	}
-
 	dev_info(dev, "%s camera subsystem: %u seninf ports, %u CamSV engines\n",
 		 cam->soc->name, cam->num_ports, cam->num_camsv);
 
 	return 0;
 
-err_nf:
-	v4l2_async_nf_unregister(&cam->notifier);
-	v4l2_async_nf_cleanup(&cam->notifier);
 err_camsv:
 	mtk_camsv_cleanup(cam);
 err_seninf:
 	mtk_seninf_cleanup(cam);
 err_media:
-	media_device_unregister(&cam->media_dev);
 	media_device_cleanup(&cam->media_dev);
 	v4l2_device_unregister(&cam->v4l2_dev);
 	return ret;
@@ -379,8 +373,10 @@ static void mtk_cam_legacy_remove(struct platform_device *pdev)
 	mtk_camsv_cleanup(cam);
 	mtk_seninf_cleanup(cam);
 
-	media_device_unregister(&cam->media_dev);
+	if (cam->graph_built)
+		media_device_unregister(&cam->media_dev);
 	media_device_cleanup(&cam->media_dev);
+
 	v4l2_device_unregister(&cam->v4l2_dev);
 }
 
@@ -396,7 +392,7 @@ static struct platform_driver mtk_cam_legacy_driver = {
 	.probe = mtk_cam_legacy_probe,
 	.remove = mtk_cam_legacy_remove,
 	.driver = {
-		.name = "mtk-cam-legacy",
+		.name = MTK_CAM_DRV_NAME,
 		.of_match_table = mtk_cam_legacy_of_match,
 	},
 };

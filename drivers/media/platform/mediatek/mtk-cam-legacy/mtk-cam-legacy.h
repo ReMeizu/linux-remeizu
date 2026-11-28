@@ -1,14 +1,31 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Register and device tree definitions for the MediaTek legacy camera path
- * (MT6735/MT6755/MT6797 families).
+ * Register, device tree and state definitions for the MediaTek legacy camera
+ * capture path (MT6735/MT6755/MT6797 and their -M derivatives).
  *
  * Copyright (C) 2026 Meizu fleet kernel port
  *
- * All offsets are relative to the block base address given in the device
- * tree.  The register layout is shared between the SoCs of this generation:
- * they all use the same "seninf"/"camsv" hardware generation driven by the
- * vendor 3.18/4.9 kernels (drivers/misc/mediatek/camera_isp, camsv).
+ * Hardware model
+ * --------------
+ * On these SoCs the camera capture path is split in two blocks:
+ *
+ *   SENINF  - the CSI-2 receiver.  It deserialises the D-PHY lanes of one or
+ *             more sensor ports into a parallel pixel stream and hands that
+ *             stream to one or more CamSV engines through the test mux.
+ *
+ *   CamSV   - "Camera Simple": a stream engine with no ISP behind it, only a
+ *             single DMA output (IMGO) and a timing generator (TG).  Each
+ *             CamSV engine appears as one /dev/videoN V4L2 capture node
+ *             delivering raw Bayer frames into DMA-contiguous memory.
+ *
+ * Media graph:
+ *
+ *   sensor subdev ------> seninf port subdev ------> camsv video node
+ *     (I2C sensor)         (/dev/v4l-subdevN)         (/dev/videoN)
+ *
+ * The sensor is an unrelated V4L2 sub-device registered by its own I2C
+ * driver (drivers/media/i2c/s5k4h8.c and friends); it is matched through the
+ * "remote-endpoint" of the seninf port's sink endpoint.
  */
 
 #ifndef __MTK_CAM_LEGACY_H__
@@ -18,110 +35,103 @@
 #include <linux/io.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/pm_runtime.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
-
-#include <linux/clk.h>
+#include <linux/videodev2.h>
 
 #include <media/media-device.h>
 #include <media/media-entity.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
+#include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 #include <media/videobuf2-v4l2.h>
 
 /* --------------------------------------------------------------------------
- * CSI-2 receiver (SENINF)
+ * SENINF (CSI-2 receiver), one 4 KiB window per SoC
  * ------------------------------------------------------------------------ */
 
-#define SENINF_CSI2_RX_CON(n)		(0x0000 + 0x40 * (n))
-#define SENINF_CSI2_RX_CON_LANES	GENMASK(1, 0)
-#define SENINF_CSI2_RX_CON_LANES_SHIFT	0
-#define SENINF_CSI2_RX_CON_CSI2_MODE	GENMASK(6, 4)
-#define SENINF_CSI2_RX_CON_CSI2_DPHY	0x4
-#define SENINF_CSI2_RX_CON_HS_SETTLE	GENMASK(23, 16)
-#define SENINF_CSI2_RX_CON_HS_SHIFT	16
+/* Per-port receive configuration */
+#define SENINF_RX_CON(n)		(0x0000 + 0x40 * (n))
+#define SENINF_RX_CON_LANE_NUM		GENMASK(3, 0)
+#define SENINF_RX_CON_MIPI_MODE		GENMASK(6, 4)
+#define SENINF_RX_CON_MIPI_MODE_CSI2	0x4
+#define SENINF_RX_CON_PHY_SEL		GENMASK(9, 8)
+#define SENINF_RX_CON_LONG_PKT_EN	BIT(10)
+#define SENINF_RX_CON_HS_SETTLE		GENMASK(23, 16)
 
-#define SENINF_CSI2_RX_EN(n)		(0x0010 + 0x40 * (n))
-#define SENINF_CSI2_RX_EN_ON		BIT(0)
-#define SENINF_CSI2_RX_EN_TG1		BIT(1)
+/* Shared receive enable: one bit per port */
+#define SENINF_RX_EN			0x0010
+#define SENINF_RX_EN_MIPI_RX_EN(n)	BIT(n)
 
-#define SENINF_CSI2_IRQ_STATUS(n)	(0x0028 + 0x40 * (n))
-#define SENINF_CSI2_IRQ_OVERRUN		BIT(0)
-#define SENINF_CSI2_IRQ_CRC		BIT(1)
-#define SENINF_CSI2_IRQ_FSM		BIT(2)
-#define SENINF_CSI2_IRQ_VSIZE		BIT(3)
-#define SENINF_CSI2_IRQ_HSIZE		BIT(4)
-#define SENINF_CSI2_IRQ_SENSOR_VSIZE	BIT(5)
-#define SENINF_CSI2_IRQ_SENSOR_HSIZE	BIT(6)
-
-/* Input path: sensor N feeds seninf port (pad) N, POL_SWAP inverts polarity */
+/* Per-port pad control; POL_SWAP inverts the D-PHY polarity */
 #define SENINF_PAD_CON(n)		(0x0200 + 0x10 * (n))
 #define SENINF_PAD_CON_POL_SWAP		BIT(15)
 
-/* Shared D-PHY settle delay, in units of 100 DDR clock cycles */
-#define SENINF_SETTLE_CTRL		0x0300
-#define SENINF_SETTLE_DELAY		GENMASK(7, 0)
+/* Test/routing mux: which seninf port feeds which CamSV TG input */
+#define SENINF_TEST_MUX_PORT(n)		(0x0400 + 0x4 * (n))
+#define SENINF_TEST_MUX_SEL		GENMASK(3, 0)
 
-#define SENINF_TOP_CTRL			0x0400
-#define SENINF_TOP_SW_RST		BIT(0)
+#define SENINF_NUM_PORTS		8
+#define SENINF_MAX_LANES		4
+#define SENINF_DEFAULT_SETTLE_NS	100
+#define SENINF_HS_SETTLE_STEP_NS	4
 
 /* --------------------------------------------------------------------------
- * Camera video front-end (CamSV): one register block and one IRQ per engine
+ * CamSV (DMA capture engine), one 4 KiB window per engine
  * ------------------------------------------------------------------------ */
 
-#define CAMSV_TOP_CFG			0x004
+#define CAMSV_TOP_CFG			0x0004
 #define CAMSV_TOP_CFG_IMGO_EN		BIT(3)
 
-#define CAMSV_INT_EN			0x010
-#define CAMSV_INT_STATUS		0x018
-#define CAMSV_INT_DONE			BIT(0)
-#define CAMSV_INT_ERR			GENMASK(7, 4)
+#define CAMSV_INT_EN			0x0010
+#define CAMSV_INT_STATUS		0x0018
+#define CAMSV_INT_IMGO_DONE		BIT(0)
+#define CAMSV_INT_OVERFLOW		BIT(1)
+#define CAMSV_INT_TG_ERR		BIT(2)
+#define CAMSV_INT_ERRORS		(CAMSV_INT_OVERFLOW | CAMSV_INT_TG_ERR)
 
-#define CAMSV_DMA_EN			0x050
+/* Frame buffer control: capture or drop the incoming frame */
+#define CAMSV_IMGO_FBC			0x0030
+#define CAMSV_IMGO_FBC_DROP_FRAME	BIT(0)
+
+#define CAMSV_DMA_EN			0x0050
 #define CAMSV_DMA_EN_IMGO		BIT(0)
-#define CAMSV_DMA_RESET			0x054
+#define CAMSV_DMA_RESET			0x0054
+#define CAMSV_DMA_RESET_IMGO		BIT(0)
 
-#define CAMSV_IPU_INT_EN		0x400
-#define CAMSV_IPU_INT_STATUS		0x408
-#define CAMSV_IPU_INT_IMGO_NUM		GENMASK(7, 0)
+/* Timing generator */
+#define CAMSV_TG_VCNT			0x0608
+#define CAMSV_TG_HCNT			0x060c
 
-/* Image output (IMGO) DMA configuration */
-#define CAMSV_IMGO_BASE_ADDR		0x300
-#define CAMSV_IMGO_XSIZE			0x308
-#define CAMSV_IMGO_YSIZE			0x30c
-#define CAMSV_IMGO_STRIDE		0x310
-#define CAMSV_IMGO_FBC			0x330
+/* Input selection: seninf port feeding this engine */
+#define CAMSV_TG_SENINF_CON		0x0614
+#define CAMSV_TG_SENINF_CON_PORT	GENMASK(3, 0)
 
-/* Timing generator: driven by the seninf port selected in TG_SENINF_CON */
-#define CAMSV_TG_CTRL			0x600
-#define CAMSV_TG_CTRL_EN		BIT(0)
-#define CAMSV_TG_MODE			0x604
-#define CAMSV_TG_MODE_VSYNC		BIT(0)
-#define CAMSV_TG_VCNT			0x608
-#define CAMSV_TG_HCNT			0x60c
-#define CAMSV_TG_PCNT			0x610
-#define CAMSV_TG_SENINF_CON		0x614
-#define CAMSV_TG_SENINF_PORT		GENMASK(3, 0)
+/* Configuration */
+#define CAMSV_CRTL_CFG			0x0700
+#define CAMSV_CRTL_CFG_RAW8		0
+#define CAMSV_CRTL_CFG_RAW10		1
+#define CAMSV_CRTL_CFG_RAW12		2
+#define CAMSV_CRTL_CFG_PIXEL_MODE	GENMASK(1, 0)
+#define CAMSV_CRTL_CFG_FRAME_MODE	BIT(3)
+#define CAMSV_CRTL_CFG_STREAM_EN	BIT(4)
+#define CAMSV_CRTL_CFG_SW_RST		BIT(8)
 
-#define CAMSV_CTRL_CFG			0x700
-#define CAMSV_CTRL_CFG_PIXEL_MODE	GENMASK(1, 0)
-#define CAMSV_CTRL_CFG_RAW8		0
-#define CAMSV_CTRL_CFG_RAW10		1
-#define CAMSV_CTRL_CFG_RAW12		2
-#define CAMSV_CTRL_CFG_STREAM		BIT(4)
-#define CAMSV_CTRL_CFG_SW_RST		BIT(8)
+#define CAMSV_MODULE_EN			0x0720
+#define CAMSV_MODULE_EN_IMGO		BIT(0)
+#define CAMSV_FMT_SEL			0x0730
+#define CAMSV_SW_CTL			0x0734
 
-#define CAMSV_MODULE_EN			0x720
-#define CAMSV_MODULE_EN_TG		BIT(0)
-#define CAMSV_MODULE_EN_IMGO		BIT(1)
-#define CAMSV_MODULE_EN_SENINF		BIT(2)
+/* IMGO output window, stride and destination address */
+#define CAMSV_IMGO_XSIZE		0x0a00
+#define CAMSV_IMGO_YSIZE		0x0a04
+#define CAMSV_IMGO_STRIDE		0x0a08
+#define CAMSV_IMGO_BASE_ADDR		0x0a0c
 
-#define CAMSV_FMT_SEL			0x730
-#define CAMSV_SW_CTL			0x734
-
-#define CAMSV_MAX_WIDTH			4224
-#define CAMSV_MAX_HEIGHT		3200
+#define CAMSV_IMGO_MAX_WIDTH		4224
+#define CAMSV_IMGO_MAX_HEIGHT		3200
 #define CAMSV_MIN_WIDTH			32
 #define CAMSV_MIN_HEIGHT		32
 
@@ -281,19 +291,20 @@ struct mtk_cam_legacy {
 	struct mutex lock;
 };
 
+/* mtk_seninf_legacy.c */
 int mtk_seninf_init(struct mtk_cam_legacy *cam);
 void mtk_seninf_cleanup(struct mtk_cam_legacy *cam);
 void mtk_seninf_port_enable(struct mtk_seninf_port *port);
 void mtk_seninf_port_disable(struct mtk_seninf_port *port);
 void mtk_seninf_apply_fmt(struct mtk_seninf_port *port,
 			  const struct v4l2_mbus_framefmt *fmt);
+u8 mtk_mbus_code_to_csi2_dt(u32 code);
 
+/* mtk_camsv_legacy.c */
 int mtk_camsv_init(struct mtk_cam_legacy *cam);
 void mtk_camsv_cleanup(struct mtk_cam_legacy *cam);
 int mtk_camsv_add_nodes(struct mtk_cam_legacy *cam);
 void mtk_camsv_remove_nodes(struct mtk_cam_legacy *cam);
-
-u8 mtk_mbus_code_to_csi2_dt(u32 code);
 
 extern const struct v4l2_subdev_ops mtk_camsv_subdev_ops;
 
