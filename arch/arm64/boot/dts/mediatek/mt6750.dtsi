@@ -327,4 +327,32 @@
 			opp-microvolt = <1050000>;
 		};
 	};
+		/*
+		 * CONSYS (MT6750 variant of the MT6755 combo subsystem):
+		 * CONN MCU block, AP reset generator, topckgen, SPM, CONN AXI
+		 * protection and the BTIF UART with its APDMA pair.
+		 */
+		connsys: connsys@18070000 {
+			compatible = "mediatek,mt6755-connsys";
+			reg = <0 0x18070000 0 0x1000>,
+			      <0 0x10007000 0 0x1000>,
+			      <0 0x10000000 0 0x1000>,
+			      <0 0x10006000 0 0x1000>,
+			      <0 0x18070000 0 0x1000>,
+			      <0 0x1100c000 0 0x1000>,
+			      <0 0x11000780 0 0x80>,
+			      <0 0x11000800 0 0x80>;
+			reg-names = "mcu", "ap_rgu", "topckgen", "spm", "axi",
+				    "btif", "btif_tx_dma", "btif_rx_dma";
+			interrupts = <GIC_SPI 90 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 90 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 111 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 112 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "btif", "btif_tx_dma", "btif_rx_dma";
+			clocks = <&infrasys CLK_INFRA_BTIF>;
+			clock-names = "btif";
+			mediatek,connsys-chip-id = <0x6750>;
+			status = "disabled";
+		};
+
 };

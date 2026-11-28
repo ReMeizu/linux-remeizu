@@ -776,5 +776,43 @@
 			status = "disabled";
 		};
 
+
+		/*
+		 * CONSYS: the integrated Wi-Fi/BT/GPS combo subsystem.
+		 *
+		 * Register blocks, in order:
+		 *   0x18070000  CONN MCU configuration (chip id, ACR, CPUPCR)
+		 *   0x10007000  AP reset generator unit   (+0x18 CPU sw reset)
+		 *   0x10000000  topckgen                (clock gate, EMI remap)
+		 *   0x10006000  sleep power manager      (+0x000 CONN power)
+		 *   0x18070000  CONN top AXI window      (+0x220/+0x228, see
+		 *                                         the SoC data: only the
+		 *                                         MT6797 AXI block differs)
+		 * BTIF lives at 0x1100C000 with its APDMA pair and three IRQs.
+		 *
+		 * The BGF and CONNSYS watchdog lines are not wired yet: their
+		 * GIC numbers are not attested in the vendor trees.
+		 */
+		connsys: connsys@18070000 {
+			compatible = "mediatek,mt6735-connsys";
+			reg = <0 0x18070000 0 0x1000>,
+			      <0 0x10007000 0 0x1000>,
+			      <0 0x10000000 0 0x1000>,
+			      <0 0x10006000 0 0x1000>,
+			      <0 0x18070000 0 0x1000>,
+			      <0 0x1100c000 0 0x1000>,
+			      <0 0x11000780 0 0x80>,
+			      <0 0x11000800 0 0x80>;
+			reg-names = "mcu", "ap_rgu", "topckgen", "spm", "axi",
+				    "btif", "btif_tx_dma", "btif_rx_dma";
+			interrupts = <GIC_SPI 90 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 111 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 112 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "btif", "btif_tx_dma", "btif_rx_dma";
+			clocks = <&pericfg CLK_PERI_BTIF>;
+			clock-names = "btif";
+			mediatek,connsys-chip-id = <0x6735>;
+			status = "disabled";
+		};
 	};
 };

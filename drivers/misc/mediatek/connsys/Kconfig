@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config MTK_CONNSYS
+	tristate "MediaTek CONSYS Wi-Fi/BT/GPS combo controller"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF
+	depends on CFG80211
+	help
+	  Say Y to enable the driver for the MediaTek CONNSYS combo
+	  connectivity subsystem found on the MT6735/MT6737M, MT6750/MT6755
+	  and MT6797 SoCs.  Choose M to build it as a module.
+
+	  The driver provides the STP (Serial Transport Protocol) and WMT
+	  control stacks plus the character devices the vendor userspace
+	  relies on:
+
+	    /dev/wmtdetect  chip detection and stack bring-up
+	    /dev/stpwmt     WMT control and MCU firmware loading
+	    /dev/stpbt      Bluetooth HCI (STP channel 0)
+	    /dev/stpgps     GPS NMEA / MNLD (STP channel 2)
+	    /dev/wmtWifi    Wi-Fi power and mode control
+
+	  It also loads the MCU ROM patch and Wi-Fi RAM code firmware
+	  (ROMv2_lm_patch*.bin / ROMv3_patch*.bin and WIFI_RAM_CODE_*) from
+	  the firmware search path.
+
+	  If unsure, say N.

@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/mediatek,connsys.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek CONSYS combo connectivity subsystem
+
+maintainers:
+  - Meizu Linux mainline project <nomorecoolnicknames@users.noreply.github.com>
+
+description: |
+  The CONSYS block is the integrated Wi-Fi / Bluetooth / GPS combo
+  subsystem of the MediaTek MT6735, MT6750, MT6755 and MT6797 SoCs.  It
+  contains a Cortex-M MCU running the connectivity firmware, a shared DRAM
+  window used for the firmware, the HIF rings and the MCU log buffer, and
+  the BTIF serial transport that carries the STP protocol.
+
+  The node gathers the register windows needed to power the block up from
+  the AP side: the CONN MCU configuration block, the AP reset generator, the
+  top level clock gate, the sleep-power-manager controller and the CONN AXI
+  protection unit, plus the BTIF UART and its APDMA pair.
+
+properties:
+  compatible:
+    enum:
+      - mediatek,mt6735-connsys
+      - mediatek,mt6755-connsys
+      - mediatek,mt6797-connsys
+
+  reg:
+    minItems: 6
+    maxItems: 8
+    description: |
+      Register windows, in this order: the CONN MCU configuration block,
+      the AP reset generator, topckgen, the SPM controller, the CONN AXI
+      protection block, the BTIF UART and optionally the BTIF TX and RX
+      APDMA blocks.
+
+  reg-names:
+    minItems: 6
+    maxItems: 8
+    items:
+      - const: mcu
+      - const: ap_rgu
+      - const: topckgen
+      - const: spm
+      - const: axi
+      - const: btif
+      - const: btif_tx_dma
+      - const: btif_rx_dma
+
+  interrupts:
+    minItems: 1
+    maxItems: 5
+    description: |
+      The BTIF interrupt (data path) and optionally the BTIF APDMA
+      interrupts, followed by the BGF and CONNSYS watchdog lines.
+
+  interrupt-names:
+    minItems: 1
+    maxItems: 5
+    items:
+      - const: btif
+      - const: btif_tx_dma
+      - const: btif_rx_dma
+      - const: bgf
+      - const: wdt
+
+  clocks:
+    maxItems: 4
+
+  clock-names:
+    items:
+      - const: btif
+      - const: btif_dma
+      - const: connsys_cfg
+      - const: connsys_emi
+
+  memory-region:
+    maxItems: 1
+    description: |
+      Phandle to the reserved DRAM window shared with the CONNSYS MCU.
+      When omitted the window configured by the boot loader is used.
+
+  mediatek,connsys-chip-id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Chip id reported to userspace (0x6735, 0x6750, 0x6755, 0x6797).
+      Defaults to 0x6735 when omitted.
+
+  mediatek,wmt-fm-strap:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1, 2]
+    description: |
+      FM strap sent to the MCU firmware: 1 for the I2C FM part, 2 for the
+      internal one.  Defaults to 2.
+
+  status: true
+
+required:
+  - compatible
+  - reg
+  - reg-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    connsys: connsys@18070000 {
+        compatible = "mediatek,mt6735-connsys";
+        reg = <0 0x18070000 0 0x1000>,
+              <0 0x10007000 0 0x1000>,
+              <0 0x10000000 0 0x1000>,
+              <0 0x10006000 0 0x1000>,
+              <0 0x18070000 0 0x1000>,
+              <0 0x1100c000 0 0x1000>,
+              <0 0x11000780 0 0x80>,
+              <0 0x11000800 0 0x80>;
+        reg-names = "mcu", "ap_rgu", "topckgen", "spm", "axi",
+                    "btif", "btif_tx_dma", "btif_rx_dma";
+        interrupts = <GIC_SPI 90 IRQ_TYPE_LEVEL_LOW>,
+                     <GIC_SPI 111 IRQ_TYPE_LEVEL_LOW>,
+                     <GIC_SPI 112 IRQ_TYPE_LEVEL_LOW>;
+        interrupt-names = "btif", "btif_tx_dma", "btif_rx_dma";
+        mediatek,connsys-chip-id = <0x6735>;
+        status = "disabled";
+    };

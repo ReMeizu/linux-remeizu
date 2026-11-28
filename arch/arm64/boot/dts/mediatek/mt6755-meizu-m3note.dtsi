@@ -850,5 +850,13 @@
 };
 
 &gpu {
+
+ /*
+ * Integrated CONSYS (Wi-Fi/BT/GPS).  The MCU clock gate and the top AXI
+ * protection block are owned by the firmware until the kernel takes the
+ * subsystem over through /dev/wmtdetect, so the node stays disabled until
+ * the connectivity stack is brought up by userspace.
+ */
+&connsys {
 	status = "okay";
 };
