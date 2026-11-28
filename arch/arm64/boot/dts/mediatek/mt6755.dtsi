@@ -1066,5 +1066,31 @@
 		clock-names = "main", "mm";
 		status = "disabled";
 	};
+
+		/* CONSYS on MT6755/MT6750: same layout as MT6735, BTIF clock
+		 * comes from the infra subsystem and the SPM power domain is
+		 * controlled through the SCPSYS block instead. */
+		connsys: connsys@18070000 {
+			compatible = "mediatek,mt6755-connsys";
+			reg = <0 0x18070000 0 0x1000>,
+			      <0 0x10007000 0 0x1000>,
+			      <0 0x10000000 0 0x1000>,
+			      <0 0x10006000 0 0x1000>,
+			      <0 0x18070000 0 0x1000>,
+			      <0 0x1100c000 0 0x1000>,
+			      <0 0x11000780 0 0x80>,
+			      <0 0x11000800 0 0x80>;
+			reg-names = "mcu", "ap_rgu", "topckgen", "spm", "axi",
+				    "btif", "btif_tx_dma", "btif_rx_dma";
+			interrupts = <GIC_SPI 90 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 90 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 111 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 112 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "btif", "btif_tx_dma", "btif_rx_dma";
+			clocks = <&infrasys CLK_INFRA_BTIF>;
+			clock-names = "btif";
+			mediatek,connsys-chip-id = <0x6755>;
+			status = "disabled";
+		};
 	};
 };
