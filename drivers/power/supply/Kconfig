@@ -789,6 +789,43 @@ config CHARGER_BQ257XX
 	  Say Y to enable support for the TI BQ257XX family of battery
 	  charging integrated circuits.
 
+config MTK_MEIZU_BATTERY
+	tristate "MediaTek/Meizu fuel gauge and battery driver"
+	depends on MEDIATEK_PMIC_AUXADC
+	help
+	  Say Y to enable the MediaTek/Meizu fuel gauge, which exposes the
+	  standard "battery" power supply of the MT6735/MT6755/MT6797 Meizu
+	  boards. The state of charge is computed from the PMIC AUXADC
+	  battery voltage and current, the board battery profiles (OCV and
+	  internal resistance tables) and the charger state.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called mtk-meizu-battery.
+
+config MTK_MEIZU_CHARGER
+	tristate "MediaTek PMIC charger (usb/ac power supplies)"
+	depends on MFD_MT6397
+	help
+	  Say Y to enable the MediaTek PMIC charger driver. It registers the
+	  "usb" and "ac" power supplies of the MT6328/MT6351/MT6353 PMICs and
+	  runs the charger detection state machine.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called mtk-pmic-charger.
+
+config CHARGER_FAN5405
+	tristate "Fairchild FAN5405 battery charger driver"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y to enable support for the Fairchild FAN5405/FAN5400 battery
+	  charger found on the Meizu M5c. The register map (CON0..CON6) and
+	  the OREG/ICHARG encoding follow the MediaTek BSP driver of the
+	  MT6735 family.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called fan5405_charger.
+
 config CHARGER_BQ25890
 	tristate "TI BQ25890 battery charger driver"
 	depends on I2C

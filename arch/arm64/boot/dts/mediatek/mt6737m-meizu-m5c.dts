@@ -33,6 +33,17 @@
 		mediatek,audio-codec = <&mt6328_codec>;
 	};
 
+	battery: battery {
+		compatible = "mediatek,mt6328-battery";
+		mediatek,auxadc = <&mt6328_auxadc>;
+		mediatek,battery-profile = "m5c-atl";
+		mediatek,ntc-pullup-ohms = <16900>;
+		voltage-min-design-microvolt = <3400000>;
+		voltage-max-design-microvolt = <4350000>;
+		charge-current-max-microamp = <1050000>;
+		charger = <&fan5405>;
+	};
+
 	chosen {
 		stdout-path = "serial0:921600n8";
 	};
@@ -257,6 +268,15 @@
 		VDDIO-supply = <&mt6328_vio18_reg>;
 		touchscreen-size-x = <720>;
 		touchscreen-size-y = <1280>;
+	};
+
+	/* Fairchild FAN5405 switching charger on i2c1 @ 0x6a */
+	fan5405: charger@6a {
+		compatible = "fairchild,fan5405";
+		reg = <0x6a>;
+		constant-charge-voltage-max-microvolt = <4350000>;
+		constant-charge-current-max-microamp = <1050000>;
+		input-current-limit-microamp = <1000000>;
 	};
 
 };

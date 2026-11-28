@@ -608,6 +608,17 @@
 		mediatek,platform = <&afe>;
 		mediatek,audio-codec = <&mt6351_codec>;
 	};
+
+	battery: battery {
+		compatible = "mediatek,mt6351-battery";
+		mediatek,auxadc = <&mt6351_auxadc>;
+		mediatek,battery-profile = "m3note";
+		mediatek,ntc-pullup-ohms = <16900>;
+		voltage-min-design-microvolt = <3400000>;
+		voltage-max-design-microvolt = <4350000>;
+		charge-current-max-microamp = <1500000>;
+		charger = <&mt6351_charger>;
+	};
 };
 
 &afe {

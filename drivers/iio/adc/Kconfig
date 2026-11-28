@@ -1106,12 +1106,38 @@ config MCP3911
 	  This driver can also be built as a module. If so, the module will be
 	  called mcp3911.
 
+config MEDIATEK_PMIC_AUXADC
+	tristate "MediaTek PMIC AUXADC helper library"
+	depends on MFD_MT6397
+	help
+	  Helper library for the auxiliary ADC block shared by the MediaTek
+	  MT6328, MT6351 and MT6353 PMICs. It is used by the PMIC AUXADC IIO
+	  drivers, by the fuel gauge (impedance measurement) and by the SoC
+	  thermal controller.
+
+	  This driver can also be built as a module. If so, the module will be
+	  called mediatek-pmic-auxadc.
+
+config MEDIATEK_MT6328_AUXADC
+	tristate "MediaTek MT6328 PMIC AUXADC driver"
+	depends on MFD_MT6397
+	select MEDIATEK_PMIC_AUXADC
+	help
+	  Say yes here to enable support for the MediaTek MT6328 PMIC
+	  Auxiliary ADC found on the MT6735/MT6737M platforms.
+	  This driver provides multiple channels for system monitoring,
+	  such as battery voltage, PMIC temperature, and others.
+
+	  This driver can also be built as a module. If so, the module will be
+	  called mt6328-auxadc.
+
 config MEDIATEK_MT6359_AUXADC
 	tristate "MediaTek MT6359 PMIC AUXADC driver"
 	depends on MFD_MT6397
+	select MEDIATEK_PMIC_AUXADC if MFD_MT6397
 	help
-	  Say yes here to enable support for MediaTek MT6357, MT6358 and
-	  MT6359 PMICs Auxiliary ADC.
+	  Say yes here to enable support for MediaTek MT6351, MT6353, MT6357,
+	  MT6358 and MT6359 PMICs Auxiliary ADC.
 	  This driver provides multiple channels for system monitoring,
 	  such as battery voltage, PMIC temperature, and others.
 

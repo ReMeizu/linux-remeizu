@@ -153,6 +153,17 @@
 		mediatek,platform = <&afe>;
 		mediatek,audio-codec = <&mt6351_codec>;
 	};
+
+	battery: battery {
+		compatible = "mediatek,mt6797-battery";
+		mediatek,auxadc = <&mt6351_auxadc>;
+		mediatek,battery-profile = "mx6";
+		mediatek,ntc-pullup-ohms = <24000>;
+		voltage-min-design-microvolt = <3400000>;
+		voltage-max-design-microvolt = <4350000>;
+		charge-current-max-microamp = <2000000>;
+		charger = <&bq25890>;
+	};
 };
 
 &uart0 {
@@ -216,6 +227,15 @@
 		mt6351_codec: audio-codec {
 			compatible = "mediatek,mt6351-sound";
 			#sound-dai-cells = <0>;
+		};
+
+		mt6351_auxadc: adc {
+			compatible = "mediatek,mt6351-auxadc";
+			#io-channel-cells = <1>;
+		};
+
+		mt6351_charger: charger {
+			compatible = "mediatek,mt6351-charger";
 		};
 
 		regulators {
@@ -386,4 +406,31 @@
 
 &afe {
 	status = "okay";
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins_a>;
+	clock-frequency = <100000>;
+	status = "okay";
+
+	/* TI BQ25890 switching charger on i2c0 @ 0x6b */
+	bq25890: charger@6b {
+		compatible = "ti,bq25890";
+		reg = <0x6b>;
+		ti,charge-current = <2048000>;
+		ti,battery-regulation-voltage = <4352000>;
+		ti,termination-current = <192000>;
+		ti,precharge-current = <128000>;
+		ti,minimum-sys-voltage = <3500000>;
+		ti,boost-voltage = <5000000>;
+		ti,boost-max-current = <1400000>;
+		ti,thermal-regulation-threshold = <120>;
+	};
+
+	/* TI BQ27532 fuel gauge on i2c0 @ 0x55 */
+	fuel-gauge@55 {
+		compatible = "ti,bq27531";
+		reg = <0x55>;
+	};
 };

@@ -17,6 +17,15 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
+		mt6328_auxadc: adc {
+			compatible = "mediatek,mt6328-auxadc";
+			#io-channel-cells = <1>;
+		};
+
+		mt6328_charger: charger {
+			compatible = "mediatek,mt6328-charger";
+		};
+
 		mt6328_keys: keys {
 			compatible = "mediatek,mt6328-keys";
 			mediatek,long-press-mode = <1>;

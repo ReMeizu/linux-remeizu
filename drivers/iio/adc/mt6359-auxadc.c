@@ -22,6 +22,9 @@
 
 #include <linux/mfd/mt6397/core.h>
 
+#include <linux/iio/adc/mediatek-pmic-auxadc.h>
+
+#include <dt-bindings/iio/adc/mediatek,mt6351-auxadc.h>
 #include <dt-bindings/iio/adc/mediatek,mt6357-auxadc.h>
 #include <dt-bindings/iio/adc/mediatek,mt6358-auxadc.h>
 #include <dt-bindings/iio/adc/mediatek,mt6359-auxadc.h>
@@ -53,7 +56,7 @@
   #define MT6363_PULLUP_RES_30K		1
   #define MT6363_PULLUP_RES_OPEN	3
 
-enum mtk_pmic_auxadc_regs {
+enum mtk_auxadc_register_id {
 	PMIC_AUXADC_ADC0,
 	PMIC_AUXADC_DCM_CON,
 	PMIC_AUXADC_IMP0,
@@ -69,12 +72,31 @@ enum mtk_pmic_auxadc_regs {
 	PMIC_AUXADC_REGS_MAX
 };
 
+/* Channels of the MT6328/MT6351/MT6353 family */
+enum mtk_legacy_auxadc_channels {
+	MTK_LEGACY_CHAN_BATSNS,
+	MTK_LEGACY_CHAN_ISENSE,
+	MTK_LEGACY_CHAN_VCDT,
+	MTK_LEGACY_CHAN_BATTEMP,
+	MTK_LEGACY_CHAN_CHIPTEMP,
+	MTK_LEGACY_CHAN_ACCDET,
+	MTK_LEGACY_CHAN_TSX,
+	MTK_LEGACY_CHAN_HPOFS,
+	MTK_LEGACY_CHAN_BATID,
+	MTK_LEGACY_CHAN_VBAT,
+	MTK_LEGACY_CHAN_MAX
+};
+
 enum mtk_pmic_auxadc_channels {
 	PMIC_AUXADC_CHAN_BATADC,
 	PMIC_AUXADC_CHAN_ISENSE,
 	PMIC_AUXADC_CHAN_VCDT,
 	PMIC_AUXADC_CHAN_BAT_TEMP,
 	PMIC_AUXADC_CHAN_BATID,
+	PMIC_AUXADC_CHAN_BATSNS,
+	PMIC_AUXADC_CHAN_BATTEMP,
+	PMIC_AUXADC_CHAN_CHIPTEMP,
+	PMIC_AUXADC_CHAN_TSX,
 	PMIC_AUXADC_CHAN_CHIP_TEMP,
 	PMIC_AUXADC_CHAN_VCORE_TEMP,
 	PMIC_AUXADC_CHAN_VPROC_TEMP,
@@ -113,6 +135,8 @@ struct mt6359_auxadc {
 	const struct mtk_pmic_auxadc_info *chip_info;
 	struct mutex lock;
 	bool timed_out;
+	/* Set for the MT6328/MT6351/MT6353 family, which uses 16 bit registers */
+	struct mediatek_pmic_auxadc *legacy;
 };
 
 /**
@@ -164,6 +188,12 @@ struct mtk_pmic_auxadc_info {
 	u8 imp_adc_num;
 	bool is_spmi;
 	bool no_reset;
+	/*
+	 * PMIC of the MT6328/MT6351/MT6353 family: the layout is close to the
+	 * MT6357 but the registers are 16 bits wide, so the conversion is done
+	 * by the shared PMIC AUXADC helper.
+	 */
+	const struct mtk_pmic_auxadc_data *legacy;
 	int (*read_imp)(struct mt6359_auxadc *adc_dev,
 			const struct iio_chan_spec *chan, int *vbat, int *ibat);
 };
@@ -297,6 +327,102 @@ static const u16 mt6358_auxadc_regs[] = {
 	[PMIC_AUXADC_IMP1]	= 0x120a,
 	[PMIC_AUXADC_RQST0]	= 0x1108,
 	[PMIC_AUXADC_RQST1]	= 0x110a,
+};
+
+
+static const struct iio_chan_spec mt6351_auxadc_channels[] = {
+	MTK_PMIC_IIO_CHAN(MT6351, bat_adc, BATSNS, MTK_LEGACY_CHAN_BATSNS, 15,
+			  IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6351, isense, ISENSE, MTK_LEGACY_CHAN_ISENSE, 15,
+			  IIO_CURRENT),
+	MTK_PMIC_IIO_CHAN(MT6351, vcdt, VCDT, MTK_LEGACY_CHAN_VCDT, 12,
+			  IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6351, batt_temp, BATTEMP, MTK_LEGACY_CHAN_BATTEMP,
+			  12, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6351, chip_temp, CHIPTEMP, MTK_LEGACY_CHAN_CHIPTEMP,
+			  12, IIO_TEMP),
+	MTK_PMIC_IIO_CHAN(MT6351, acc_det, ACCDET, MTK_LEGACY_CHAN_ACCDET, 12,
+			  IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6351, tsx_temp, TSX, MTK_LEGACY_CHAN_TSX,
+			  12, IIO_TEMP),
+	MTK_PMIC_IIO_CHAN(MT6351, hp_ofs_cal, HPOFS_CAL, MTK_LEGACY_CHAN_HPOFS,
+			  12, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6351, batt_id, BATID, MTK_LEGACY_CHAN_BATID, 12,
+			  IIO_VOLTAGE),
+};
+
+static const struct iio_chan_spec mt6353_auxadc_channels[] = {
+	MTK_PMIC_IIO_CHAN(MT6353, bat_adc, BATSNS, MTK_LEGACY_CHAN_BATSNS, 15,
+			  IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6353, isense, ISENSE, MTK_LEGACY_CHAN_ISENSE, 15,
+			  IIO_CURRENT),
+	MTK_PMIC_IIO_CHAN(MT6353, vcdt, VCDT, MTK_LEGACY_CHAN_VCDT, 12,
+			  IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6353, batt_temp, BATTEMP, MTK_LEGACY_CHAN_BATTEMP,
+			  12, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6353, chip_temp, CHIPTEMP, MTK_LEGACY_CHAN_CHIPTEMP,
+			  12, IIO_TEMP),
+	MTK_PMIC_IIO_CHAN(MT6353, acc_det, ACCDET, MTK_LEGACY_CHAN_ACCDET, 12,
+			  IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6353, tsx_temp, TSX, MTK_LEGACY_CHAN_TSX,
+			  12, IIO_TEMP),
+	MTK_PMIC_IIO_CHAN(MT6353, hp_ofs_cal, HPOFS_CAL, MTK_LEGACY_CHAN_HPOFS,
+			  12, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6353, batt_id, BATID, MTK_LEGACY_CHAN_BATID, 12,
+			  IIO_VOLTAGE),
+};
+
+static const u16 mt6351_auxadc_regs[] = {
+	[PMIC_AUXADC_ADC0]	= 0x0e00,
+	[PMIC_AUXADC_IMP0]	= 0x0ef6,
+	[PMIC_AUXADC_IMP1]	= 0x0ef8,
+	[PMIC_AUXADC_RQST0]	= 0x0e96,
+};
+
+/* MT6353 is the storage-only sibling of the MT6351 and shares its layout */
+static const u16 mt6353_auxadc_regs[] = {
+	[PMIC_AUXADC_ADC0]	= 0x0e00,
+	[PMIC_AUXADC_IMP0]	= 0x0ef6,
+	[PMIC_AUXADC_IMP1]	= 0x0ef8,
+	[PMIC_AUXADC_RQST0]	= 0x0e96,
+};
+
+/*
+ * MT6351/MT6353 register offsets are the 16 bit MT6328 layout (upmu_hw.h),
+ * which is also the upstream MT6397 map: registers are adjacent 16 bit words
+ * with _SET at +2 and _CLR at +4.
+ */
+#define MTK_PMIC_LEGACY_REGS						\
+	.regs = {							\
+		[MTK_PMIC_AUXADC_REG_FGADC_CON0]	= 0x0ca4,	\
+		[MTK_PMIC_AUXADC_REG_FGADC_CON1]	= 0x0ca6,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_ADC0]	= 0x0e00,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_STA0]	= 0x0e90,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_RQST0_SET]	= 0x0e98,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON0]	= 0x0ea2,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON0_SET]	= 0x0ea4,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON0_CLR]	= 0x0ea6,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON2]	= 0x0eaa,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON3]	= 0x0eac,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON4]	= 0x0eae,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON6]	= 0x0eb2,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_CON7]	= 0x0eb4,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_IMP0]	= 0x0ef6,	\
+		[MTK_PMIC_AUXADC_REG_AUXADC_IMP1]	= 0x0ef8,	\
+		[MTK_PMIC_AUXADC_REG_TOP_CKPDN_CON2]	= 0x0248,	\
+	}
+
+static const struct mtk_pmic_auxadc_data mt6351_auxadc_data = {
+	.name = "MT6351",
+	MTK_PMIC_LEGACY_REGS,
+	/* pmic_auxadc_init(): AVG_NUM_SEL 0x83, SPL_NUM_SLEEP 0x18 */
+	.avg_num_sel = 0x83,
+	.spl_num_sleep = 0x18,
+	.isense_r_bat = 56000,
+	.vcdt_r1 = 100400,
+	.vcdt_r2 = 24900,
+	.battemp_pull_up = 12000,
+	.battemp_pull_volt = 1800,
 };
 
 static const struct iio_chan_spec mt6359_auxadc_channels[] = {
@@ -560,6 +686,26 @@ static const struct mtk_pmic_auxadc_info mt6357_chip_info = {
 	.vref_mV = 1800,
 };
 
+static const struct mtk_pmic_auxadc_info mt6351_chip_info = {
+	.model_name = "MT6351",
+	.channels = mt6351_auxadc_channels,
+	.num_channels = ARRAY_SIZE(mt6351_auxadc_channels),
+	.regs = mt6351_auxadc_regs,
+	.legacy = &mt6351_auxadc_data,
+	.no_reset = true,
+	.vref_mV = 1800,
+};
+
+static const struct mtk_pmic_auxadc_info mt6353_chip_info = {
+	.model_name = "MT6353",
+	.channels = mt6353_auxadc_channels,
+	.num_channels = ARRAY_SIZE(mt6353_auxadc_channels),
+	.regs = mt6353_auxadc_regs,
+	.legacy = &mt6351_auxadc_data,
+	.no_reset = true,
+	.vref_mV = 1800,
+};
+
 static const struct mtk_pmic_auxadc_info mt6358_chip_info = {
 	.model_name = "MT6358",
 	.channels = mt6358_auxadc_channels,
@@ -610,7 +756,7 @@ static void mt6359_auxadc_reset(struct mt6359_auxadc *adc_dev)
 	struct regmap *regmap = adc_dev->regmap;
 
 	/* Some PMICs do not support reset */
-	if (cinfo->no_reset)
+	if (cinfo->no_reset || cinfo->legacy)
 		return;
 
 	/* Unlock HK_TOP writes */
@@ -760,14 +906,69 @@ static int mt6359_auxadc_read_label(struct iio_dev *indio_dev,
 	return sysfs_emit(label, "%s\n", chan->datasheet_name);
 }
 
+/**
+ * mt6351_auxadc_read_raw - read one of the legacy PMIC channels
+ * @adc_dev:	main driver structure
+ * @chan:	IIO channel spec
+ * @val:	value returned to the caller
+ * @val2:	denominator for IIO_VAL_FRACTIONAL
+ * @mask:	requested information
+ *
+ * MT6351/MT6353 have the MT6357 channel map but 16 bit registers and a 12 bit
+ * (15 bit for the battery/current channels) converter, so the conversion is
+ * delegated to the shared PMIC AUXADC helper.
+ */
+static int mt6351_auxadc_read_raw(struct mt6359_auxadc *adc_dev,
+				  const struct iio_chan_spec *chan,
+				  int *val, int *val2, long mask)
+{
+	unsigned int ch = chan->channel;
+	u32 raw;
+	int ret;
+
+	switch (mask) {
+	case IIO_CHAN_INFO_SCALE:
+		/*
+		 * Battery sense (ch 0) and current sense (ch 1) are measured
+		 * through a 3x gain stage, the other inputs go straight into
+		 * the 12 bit converter with the 1.8 V reference.
+		 */
+		*val = (ch < 2 ? 3 : 1) * adc_dev->chip_info->vref_mV;
+		*val2 = 4096;
+		return IIO_VAL_FRACTIONAL;
+	case IIO_CHAN_INFO_RAW:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	guard(mutex)(&adc_dev->lock);
+
+	if (ch == MTK_PMIC_AUXADC_CHAN_BATID)
+		ret = mediatek_pmic_auxadc_read_batid(adc_dev->legacy, ch, &raw);
+	else
+		ret = mediatek_pmic_auxadc_read(adc_dev->legacy, ch, &raw);
+
+	if (ret)
+		return ret;
+
+	*val = raw;
+	return IIO_VAL_INT;
+}
+
 static int mt6359_auxadc_read_raw(struct iio_dev *indio_dev,
 				  const struct iio_chan_spec *chan,
 				  int *val, int *val2, long mask)
 {
 	struct mt6359_auxadc *adc_dev = iio_priv(indio_dev);
 	const struct mtk_pmic_auxadc_info *cinfo = adc_dev->chip_info;
-	const struct mtk_pmic_auxadc_chan *desc = &cinfo->desc[chan->scan_index];
+	const struct mtk_pmic_auxadc_chan *desc;
 	int ret;
+
+	if (cinfo->legacy)
+		return mt6351_auxadc_read_raw(adc_dev, chan, val, val2, mask);
+
+	desc = &cinfo->desc[chan->scan_index];
 
 	if (mask == IIO_CHAN_INFO_SCALE) {
 		*val = desc->r_ratio.numerator * cinfo->vref_mV;
@@ -870,6 +1071,18 @@ static int mt6359_auxadc_probe(struct platform_device *pdev)
 
 	mutex_init(&adc_dev->lock);
 
+	if (chip_info->legacy) {
+		adc_dev->legacy = mediatek_pmic_auxadc_alloc(dev, regmap,
+							     chip_info->legacy);
+		if (IS_ERR(adc_dev->legacy))
+			return dev_err_probe(dev, PTR_ERR(adc_dev->legacy),
+					     "Failed to register the AUXADC helper\n");
+
+		ret = mediatek_pmic_auxadc_init(adc_dev->legacy);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to initialise the AUXADC\n");
+	}
+
 	mt6359_auxadc_reset(adc_dev);
 
 	indio_dev->name = adc_dev->chip_info->model_name;
@@ -886,6 +1099,8 @@ static int mt6359_auxadc_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id mt6359_auxadc_of_match[] = {
+	{ .compatible = "mediatek,mt6351-auxadc", .data = &mt6351_chip_info },
+	{ .compatible = "mediatek,mt6353-auxadc", .data = &mt6353_chip_info },
 	{ .compatible = "mediatek,mt6357-auxadc", .data = &mt6357_chip_info },
 	{ .compatible = "mediatek,mt6358-auxadc", .data = &mt6358_chip_info },
 	{ .compatible = "mediatek,mt6359-auxadc", .data = &mt6359_chip_info },
