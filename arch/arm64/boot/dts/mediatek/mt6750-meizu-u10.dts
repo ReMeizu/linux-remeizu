@@ -20,6 +20,13 @@
 		stdout-path = "serial0:921600n8";
 	};
 
+	sound {
+		compatible = "mediatek,mt6750-mt6353-sound";
+		model = "mt6750-meizu-u10";
+		mediatek,platform = <&afe>;
+		mediatek,audio-codec = <&mt6353_codec>;
+	};
+
 	/*
 	 * LK rewrites this from EMI settings before boot; the stock U10 DTS
 	 * uses the same 1 GiB window. A live U10 reports ~1.8 GiB MemTotal,
@@ -120,6 +127,15 @@
 		compatible = "mediatek,mt6353";
 		#address-cells = <0>;
 
+		mt6353_codec: audio-codec {
+			compatible = "mediatek,mt6353-sound";
+			#sound-dai-cells = <0>;
+		};
+
+		mt6353_accdet: accdet {
+			compatible = "mediatek,mtk-accdet";
+		};
+
 		regulators {
 			mt6353_vemc: ldo-vemc {
 				regulator-name = "vemc";
@@ -164,3 +180,7 @@
  * binding headers above.
  */
 #include "mt6750-meizu-peripherals.dtsi"
+
+&afe {
+	status = "okay";
+};

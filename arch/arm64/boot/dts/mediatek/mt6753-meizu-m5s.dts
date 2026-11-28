@@ -27,6 +27,13 @@
 		stdout-path = "serial0:921600n8";
 	};
 
+	sound {
+		compatible = "mediatek,mt6735-mt6328-sound";
+		model = "mt6753-meizu-m5s";
+		mediatek,platform = <&afe>;
+		mediatek,audio-codec = <&mt6328_codec>;
+	};
+
 	memory@40000000 {
 		device_type = "memory";
 		reg = <0 0x40000000 0 0x3c3c0000>,
@@ -184,5 +191,9 @@
  * the connectivity stack is brought up by userspace.
  */
 &connsys {
+	status = "okay";
+};
+
+&afe {
 	status = "okay";
 };

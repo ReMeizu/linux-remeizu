@@ -34,6 +34,17 @@
 			};
 		};
 
+		mt6328_codec: audio-codec {
+			compatible = "mediatek,mt6328-sound";
+			#sound-dai-cells = <0>;
+		};
+
+		mt6328_accdet: accdet {
+			compatible = "mediatek,mtk-accdet";
+			interrupt-parent = <&mt6328>;
+			interrupts = <10 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
 		mt6328_regulator: regulators {
 			compatible = "mediatek,mt6328-regulator";
 

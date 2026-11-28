@@ -36,6 +36,61 @@ config SND_SOC_MT2701_WM8960
 	  Select Y if you have such device.
 	  If unsure select "N".
 
+config SND_SOC_MT6735
+	tristate "ASoC support for MediaTek MT6735/MT6737/MT6753"
+	depends on ARCH_MEDIATEK
+	select SND_SOC_MEDIATEK
+	help
+	  This adds ASoC platform driver support for the MediaTek
+	  MT6735/MT6737/MT6753 audio front-end (AFE), including the
+	  memory-interface (DL1/UL1/...), ADDA (MTKAIF) and PCM DAIs.
+
+	  Say Y or M if you have such a device.
+
+config SND_SOC_MT6735_MT6328
+	tristate "ASoC Audio driver for MT6735 with MT6328/MT6353 codec"
+	depends on SND_SOC_MT6735 && MTK_PMIC_WRAP
+	select SND_SOC_MT6328
+	select SND_SOC_MTK_ACCDET
+	help
+	  This adds the ASoC machine driver for MediaTek MT6735/MT6737
+	  boards with the MT6328 PMIC audio codec, and for MT6753 boards
+	  with the MT6353 (register compatible).
+
+	  Say Y or M if you have such a device.
+
+config SND_SOC_MT6755
+	tristate "ASoC support for MediaTek MT6755/MT6750 chip"
+	depends on ARCH_MEDIATEK
+	select SND_SOC_MEDIATEK
+	help
+	  This adds ASoC platform driver support for the MediaTek
+	  MT6755/MT6750 audio front-end (AFE), including the
+	  memory-interface (DL1/UL1/...), ADDA (MTKAIF) and PCM DAIs.
+
+	  Say Y or M if you have such a device.
+
+config SND_SOC_MT6755_MT6351
+	tristate "ASoC Audio driver for MT6755 with MT6351 codec"
+	depends on SND_SOC_MT6755 && MTK_PMIC_WRAP
+	select SND_SOC_MT6351
+	help
+	  This adds the ASoC machine driver for MediaTek MT6755 boards
+	  with the MT6351 PMIC audio codec.
+
+	  Say Y or M if you have such a device.
+
+config SND_SOC_MT6755_MT6353
+	tristate "ASoC Audio driver for MT6750 with MT6353 codec"
+	depends on SND_SOC_MT6755 && MTK_PMIC_WRAP
+	select SND_SOC_MT6328
+	select SND_SOC_MTK_ACCDET
+	help
+	  This adds the ASoC machine driver for MediaTek MT6750 boards
+	  with the MT6353 PMIC audio codec.
+
+	  Say Y or M if you have such a device.
+
 config SND_SOC_MT6797
 	tristate "ASoC support for Mediatek MT6797 chip"
 	depends on ARCH_MEDIATEK
@@ -55,6 +110,18 @@ config SND_SOC_MT6797_MT6351
 	  with the MT6351 codecs.
 	  Select Y if you have such device.
 	  If unsure select "N".
+
+config SND_SOC_MT6797_MX6
+	tristate "ASoC Audio driver for Meizu MX6 (MT6797 + MT6351 + TFA989x)"
+	depends on SND_SOC_MT6797 && MTK_PMIC_WRAP && I2C
+	select SND_SOC_MT6351
+	select SND_SOC_TFA989X
+	help
+	  This adds the ASoC machine driver for the Meizu MX6: the MT6351
+	  PMIC audio codec handles headset, handset and microphones while an
+	  NXP TFA98xx SmartPA fed over AFE I2S2 drives the loudspeaker.
+
+	  Say Y or M if you have such a device.
 
 config SND_SOC_MT7986
 	tristate "ASoC support for Mediatek MT7986 chip"

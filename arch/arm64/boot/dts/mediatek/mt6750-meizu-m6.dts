@@ -39,6 +39,13 @@
 		stdout-path = "serial0:921600n8";
 	};
 
+	sound {
+		compatible = "mediatek,mt6750-mt6353-sound";
+		model = "mt6750-meizu-m6";
+		mediatek,platform = <&afe>;
+		mediatek,audio-codec = <&mt6353_codec>;
+	};
+
 	/*
 	 * Stock DTB value (stock-appended.dts:280-284).  LK rewrites the
 	 * memory node from the EMI settings on every boot, so this is the
@@ -165,6 +172,15 @@
 		compatible = "mediatek,mt6353";
 		#address-cells = <0>;
 
+		mt6353_codec: audio-codec {
+			compatible = "mediatek,mt6353-sound";
+			#sound-dai-cells = <0>;
+		};
+
+		mt6353_accdet: accdet {
+			compatible = "mediatek,mtk-accdet";
+		};
+
 		regulators {
 			mt6353_vemc: ldo-vemc {
 				regulator-name = "vemc";
@@ -218,3 +234,7 @@
  * binding headers above.
  */
 #include "mt6750-meizu-peripherals.dtsi"
+
+&afe {
+	status = "okay";
+};

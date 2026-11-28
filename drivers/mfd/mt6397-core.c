@@ -14,6 +14,7 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/mt6323/core.h>
 #include <linux/mfd/mt6328/core.h>
+#include <linux/mfd/mt6328/irq.h>
 #include <linux/mfd/mt6331/core.h>
 #include <linux/mfd/mt6351/core.h>
 #include <linux/mfd/mt6353/registers.h>
@@ -175,12 +176,21 @@ static const struct mfd_cell mt6328_devs[] = {
 		.num_resources = ARRAY_SIZE(mt6328_keys_resources),
 		.resources = mt6328_keys_resources,
 		.of_compatible = "mediatek,mt6328-keys"
+	}, {
+		.name = "mt6328-sound",
+		.of_compatible = "mediatek,mt6328-sound"
+	}, {
+		.name = "mtk-accdet",
+		.of_compatible = "mediatek,mtk-accdet"
 	},
 };
 
 static const struct mfd_cell mt6351_devs[] = {
 	{
 		.name = "mt6351-regulator",
+	}, {
+		.name = "mt6351-sound",
+		.of_compatible = "mediatek,mt6351-sound"
 	}, {
 		.name = "mt6351-rtc",
 		.num_resources = ARRAY_SIZE(mt6351_rtc_resources),
@@ -202,6 +212,14 @@ static const struct mfd_cell mt6351_devs[] = {
  */
 static const struct mfd_cell mt6353_devs[] = {
 	{ .name = "mt6353-regulator" },
+	{
+		.name = "mt6328-sound",
+		.of_compatible = "mediatek,mt6353-sound"
+	},
+	{
+		.name = "mtk-accdet",
+		.of_compatible = "mediatek,mtk-accdet"
+	},
 };
 
 static const struct mfd_cell mt6357_devs[] = {
@@ -350,7 +368,8 @@ static const struct chip_data mt6328_core = {
 	.cid_shift = 0,
 	.cells = mt6328_devs,
 	.cell_size = ARRAY_SIZE(mt6328_devs),
-	.irq_init = mt6397_irq_init,
+	.irq_init = mt6328_irq_init,
+	.irq_exit = mt6328_irq_exit,
 };
 
 static const struct chip_data mt6351_core = {
