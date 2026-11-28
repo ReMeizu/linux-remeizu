@@ -827,6 +827,45 @@
 			status = "disabled";
 		};
 
+		/*
+		 * Legacy SENINF CSI-2 receiver and CamSV DMA capture engines.
+		 * Addresses and interrupts from the vendor MT6735M tree
+		 * (SENINF_TOP@15008000 SPI 182, ISPSYS/CAM0 SPI 183).
+		 */
+		camera: camera@15008000 {
+			compatible = "mediatek,mt6735-camera";
+			reg = <0 0x15008000 0 0x1000>;
+			reg-names = "seninf";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			status = "disabled";
+
+			camsv0: camsv@15009000 {
+				compatible = "mediatek,cam-simple-engine";
+				reg = <0 0x15009000 0 0x1000>;
+				cell-index = <0>;
+				interrupts = <GIC_SPI 183 IRQ_TYPE_LEVEL_LOW>;
+
+				port {
+					camsv0_in: endpoint {
+					};
+				};
+			};
+
+			camsv1: camsv@1500a000 {
+				compatible = "mediatek,cam-simple-engine";
+				reg = <0 0x1500a000 0 0x1000>;
+				cell-index = <1>;
+				interrupts = <GIC_SPI 182 IRQ_TYPE_LEVEL_LOW>;
+
+				port {
+					camsv1_in: endpoint {
+					};
+				};
+			};
+		};
+
 		mmc0: mmc@11230000 {
 			compatible = "mediatek,mt6735-mmc";
 			reg = <0 0x11230000 0 0x1000>;

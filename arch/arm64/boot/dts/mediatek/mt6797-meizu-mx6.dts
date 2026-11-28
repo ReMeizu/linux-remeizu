@@ -280,6 +280,30 @@
 				regulator-min-microvolt = <3000000>;
 				regulator-max-microvolt = <3000000>;
 			};
+
+			mt6351_vcama: ldo-vcama {
+				regulator-name = "vcama";
+				regulator-min-microvolt = <1500000>;
+				regulator-max-microvolt = <2800000>;
+			};
+
+			mt6351_vcamd: ldo-vcamd {
+				regulator-name = "vcamd";
+				regulator-min-microvolt = <900000>;
+				regulator-max-microvolt = <1210000>;
+			};
+
+			mt6351_vcamio: ldo-vcamio {
+				regulator-name = "vcamio";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1800000>;
+			};
+
+			mt6351_vgp3: ldo-vgp3 {
+				regulator-name = "vgp3";
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <1810000>;
+			};
 		};
 	};
 };
@@ -433,4 +457,113 @@
 		compatible = "ti,bq27531";
 		reg = <0x55>;
 	};
+
+	/*
+	 * TI LM3644 dual-tone camera flash controller (stock strobe_main@63
+	 * on i2c0, hardware enable pin GPIO194).
+	 */
+	flash@63 {
+		compatible = "ti,lm3644", "mediatek,strobe_main";
+		reg = <0x63>;
+		enable-gpios = <&pio 194 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&i2c3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c3_pins_a>;
+	clock-frequency = <400000>;
+	status = "okay";
+
+	/*
+	 * Rear camera: Sony IMX386 (12 Mpix, 4-lane CSI-2) at 0x1a on i2c3.
+	 * Stock pins: cam0_rst = GPIO33.
+	 */
+	camera_rear: camera@1a {
+		compatible = "sony,imx386";
+		reg = <0x1a>;
+		avdd-supply = <&mt6351_vcama>;
+		dovdd-supply = <&mt6351_vcamio>;
+		dvdd-supply = <&mt6351_vcamd>;
+		reset-gpios = <&pio 33 GPIO_ACTIVE_LOW>;
+
+		port {
+			imx386_out: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&seninf_in0>;
+			};
+		};
+	};
+
+	/*
+	 * Front camera: OmniVision OV5695 (5 Mpix, 2-lane CSI-2) at 0x36 on i2c3.
+	 * Stock pins: cam1_rst = GPIO35, DVDD on MT6351 VGP3, 125 MHz MCLK.
+	 */
+	camera_front: camera@36 {
+		compatible = "ovti,ov5695";
+		reg = <0x36>;
+		clock-frequency = <125000000>;
+		avdd-supply = <&mt6351_vcama>;
+		dovdd-supply = <&mt6351_vcamio>;
+		dvdd-supply = <&mt6351_vgp3>;
+		reset-gpios = <&pio 35 GPIO_ACTIVE_LOW>;
+
+		port {
+			ov5695_out: endpoint {
+				data-lanes = <1 2>;
+				remote-endpoint = <&seninf_in1>;
+			};
+		};
+	};
+};
+
+&camera {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			seninf_in0: endpoint@0 {
+				reg = <0>;
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&imx386_out>;
+			};
+
+			seninf_out0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&camsv0_in>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			seninf_in1: endpoint@0 {
+				reg = <0>;
+				data-lanes = <1 2>;
+				remote-endpoint = <&ov5695_out>;
+			};
+
+			seninf_out1: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&camsv1_in>;
+			};
+		};
+	};
+};
+
+&camsv0_in {
+	remote-endpoint = <&seninf_out0>;
+};
+
+&camsv1_in {
+	remote-endpoint = <&seninf_out1>;
 };

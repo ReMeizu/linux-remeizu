@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+menu "MediaTek legacy (MT6735/MT6755/MT6797) camera support"
+
+config VIDEO_MTK_CAM_LEGACY
+	tristate "MediaTek legacy Seninf/CamSV CSI-2 capture"
+	depends on VIDEO_DEV
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_FWNODE
+	help
+	  Say Y or M here to enable the V4L2 capture path of the MediaTek
+	  MT6735/MT6755/MT6797 (Helio) SoCs.  The driver exposes the Camera
+	  Serial Interface (CSI-2 receiver) together with the CamSV DMA
+	  engines as Media Controller video nodes carrying raw Bayer frames
+	  read out of the sensor via the SMIs.
+
+	  Sensors are attached as V4L2 sub-devices via their OF endpoints
+	  and the camera CSI port nodes.  Requires a device tree describing
+	  both the seninf/camsv nodes and the sensor endpoint.
+
+endmenu

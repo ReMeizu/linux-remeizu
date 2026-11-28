@@ -1254,6 +1254,45 @@
 		nvmem-cell-names = "calibration-data";
 		#thermal-sensor-cells = <0>;
 	};
+
+	/*
+	 * Legacy SENINF CSI-2 receiver and CamSV DMA capture engines.
+	 * Stock mt6755.dtsi: seninf@15008000 (SPI 209), camsv@15009000
+	 * (SPI 213), camsv1@1500a000 (SPI 214).
+	 */
+	camera: camera@15008000 {
+		compatible = "mediatek,mt6755-camera";
+		reg = <0 0x15008000 0 0x1000>;
+		reg-names = "seninf";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		status = "disabled";
+
+		camsv0: camsv@15009000 {
+			compatible = "mediatek,cam-simple-engine";
+			reg = <0 0x15009000 0 0x1000>;
+			cell-index = <0>;
+			interrupts = <GIC_SPI 213 IRQ_TYPE_LEVEL_LOW>;
+
+			port {
+				camsv0_in: endpoint {
+				};
+			};
+		};
+
+		camsv1: camsv@1500a000 {
+			compatible = "mediatek,cam-simple-engine";
+			reg = <0 0x1500a000 0 0x1000>;
+			cell-index = <1>;
+			interrupts = <GIC_SPI 214 IRQ_TYPE_LEVEL_LOW>;
+
+			port {
+				camsv1_in: endpoint {
+				};
+			};
+		};
+	};
 	};
 
 	thermal-zones {
