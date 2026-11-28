@@ -281,6 +281,11 @@ static int ashmem_release(struct inode *ignored, struct file *file)
 	struct ashmem_range *range, *next;
 
 	mutex_lock(&ashmem_mutex);
+	if (unlikely(!asma)) {
+		mutex_unlock(&ashmem_mutex);
+		return 0;
+	}
+	file->private_data = NULL;
 	list_for_each_entry_safe(range, next, &asma->unpinned_list, unpinned)
 		range_del(range);
 	mutex_unlock(&ashmem_mutex);
@@ -455,17 +460,19 @@ ashmem_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 		loff_t start = range->pgstart * PAGE_SIZE;
 		loff_t end = (range->pgend + 1) * PAGE_SIZE;
 
+		/* Do not accumulate work across multiple callers in one scan. */
+		if (freed >= sc->nr_to_scan)
+			break;
+
 		/* A failed hole punch must not report purged pages to userspace. */
 		if (vfs_fallocate(range->asma->file,
 				  FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
 				  start, end - start))
 			continue;
-		range->purged = ASHMEM_WAS_PURGED;
-		lru_del(range);
 
 		freed += range_size(range);
-		if (freed >= sc->nr_to_scan)
-			break;
+		range->purged = ASHMEM_WAS_PURGED;
+		lru_del(range);
 	}
 	mutex_unlock(&ashmem_mutex);
 	return freed;
@@ -730,6 +737,15 @@ static int ashmem_pin_unpin(struct ashmem_area *asma, unsigned long cmd,
 	pgstart = pin.offset / PAGE_SIZE;
 	pgend = pgstart + (pin.len / PAGE_SIZE) - 1;
 
+	/* A zero-length region would make every range iterator jump past the
+	 * last page; userspace only gets here with pin.len == 0 when the region
+	 * is already fully pinned, so treat it as a no-op.
+	 */
+	if (unlikely(pgend < pgstart)) {
+		ret = (cmd == ASHMEM_GET_PIN_STATUS) ? ASHMEM_IS_PINNED : 0;
+		goto out_unlock;
+	}
+
 	switch (cmd) {
 	case ASHMEM_PIN:
 		ret = ashmem_pin(asma, pgstart, pgend);
@@ -882,4 +898,9 @@ out_free1:
 out:
 	return ret;
 }
-device_initcall(ashmem_init);
+/*
+ * Nobody consumes /dev/ashmem during early boot, and misc_register() needs
+ * the device model. Using module_init() keeps a =m build possible and lets
+ * the device appear once the driver core is ready.
+ */
+module_init(ashmem_init);

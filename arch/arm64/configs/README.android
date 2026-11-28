@@ -1,0 +1,74 @@
+# Android kernel interface configuration (6.18)
+
+`remeizu_android.config` is the Android userspace compatibility fragment.
+It is merged *after* the board fragment:
+
+    make ARCH=arm64 O=<out> defconfig remeizu.config remeizu_android.config
+    make ARCH=arm64 O=<out> olddefconfig
+
+It carries no board driver choices. Board support lives in `remeizu.config`
+and in the per-board fragments (`meizu_m5c.config`, `meizu_u10.config`,
+`mt6797_mx6.config`, `m681_defconfig`, ...).
+
+## What the fragment pins down
+
+| Area | Symbols |
+| --- | --- |
+| Binder IPC | `ANDROID_BINDER_IPC`, `ANDROID_BINDERFS`, `ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"` |
+| Legacy shared memory | `ASHMEM` (real shmem-backed ABI in `drivers/android/ashmem.c`), `MEMFD_CREATE` |
+| Graphics buffers | `DMA_SHARED_BUFFER`, `DMABUF_HEAPS`, `DMABUF_HEAPS_SYSTEM`, `DMABUF_HEAPS_CMA`, `SYNC_FILE`, `SW_SYNC`, `UDMABUF`, `DRM_PANFROST=m` |
+| SELinux | `SECURITY`, `SECURITYFS`, `SECURITY_NETWORK`, `AUDIT`, `AUDITSYSCALL`, `SECURITY_SELINUX`, `SECURITY_SELINUX_{BOOTPARAM,DEVELOP,AVC_STATS}`, `LSM="..."`, `SECCOMP_FILTER` |
+| cgroups | `CGROUPS`, `CGROUP_SCHED`+`CFS_BANDWIDTH`, `CPUSETS`+`CPUSETS_V1`, `MEMCG`+`MEMCG_V1`, `BLK_CGROUP`, `CGROUP_{CPUACCT,DEVICE,PIDS,FREEZER,PERF,BPF}` |
+| eBPF / netd | `BPF_SYSCALL`, `BPF_JIT`, `BPF_JIT_ALWAYS_ON`, `NET_CLS_BPF`, `NET_ACT_BPF`, `CGROUP_BPF`, `NETFILTER_XT_MATCH_BPF`, full `iptables`/`ip6tables` match+target set, `NF_TABLES` + `NFT_COMPAT`, socket diag families |
+| Memory pressure | `PSI` |
+| Filesystems | `EXT4_FS` with `POSIX_ACL`/`SECURITY`, `F2FS_FS` with `XATTR`/`POSIX_ACL`/`SECURITY`, `FS_ENCRYPTION`, `FS_VERITY`, `TMPFS_{POSIX_ACL,XATTR}`, `OVERLAY_FS`, `FUSE_FS` + `FUSE_PASSTHROUGH`, `FANOTIFY` |
+| Swap | `ZRAM` (lz4/lz4hc/zstd/lzo backends, lz4 default), `ZSMALLOC`, `ZSWAP`, `ZRAM_{WRITEBACK,MULTI_COMP}` |
+| Verified boot | `BLK_DEV_DM`, `DM_CRYPT`, `DM_VERITY`, `DM_VERITY_VERIFY_ROOTHASH_SIG`, `DM_VERITY_FEC`, `BLK_DEV_LOOP`, arm64 AES (`CRYPTO_AES_ARM64*`), `CRYPTO_XTS`, `CRYPTO_ESSIV` |
+| USB gadget | `USB_CONFIGFS` + `_F_FS` (ADB *and* MTP/PTP: both are FunctionFS descriptors written by `adbd` and `MediaProvider`), `_ACM`, `_ECM`/`_NCM`/`_RNDIS`/`_EEM` tethering, `_MASS_STORAGE`, `_F_UAC2`, `_F_MIDI`, `_F_HID`, `_F_UVC`, `TYPEC` |
+| Crash logs | `PSTORE`, `PSTORE_RAM`, `PSTORE_CONSOLE`, `PSTORE_PMSG`, `PANIC_TIMEOUT`, `MAGIC_SYSRQ`, `PROC_KCORE` |
+
+## Deliberate absences (and why)
+
+These appear in older Android kernel defconfigs but must **not** be added
+to a 6.18 tree; the symbols do not exist and userspace 13+ no longer asks
+for them:
+
+* `ION`, `ION_*` heaps -- replaced by `DMABUF_HEAPS`; libdmabufheap probes the
+  system/CMA heaps through `/dev/dma_heap/*`.
+* `SDCARDFS` -- replaced by FUSE plus `FUSE_PASSTHROUGH`; `sdcardfs`-specific
+  mount options are gone from `vold` in Android 11+.
+* `LOW_MEMORY_KILLER` -- replaced by the userspace `lmkd`, which consumes
+  `PSI` and the `memory.pressure` controller; there is no in-kernel killer.
+* `NETFILTER_XT_MATCH_QTAGUID`, `NETFILTER_XT_MATCH_QUOTA2` -- dropped from
+  mainline; `netd` accounts per-UID traffic through eBPF (`CGROUP_BPF`).
+* `SCHED_(HMP|WALT|TUNE|CORE_CTL)`, `CGROUP_SCHEDTUNE` -- vendor scheduler
+  extensions; they do not exist in mainline and Android falls back to the
+  standard CFS/EEVDF interfaces.
+* `BFQ` (v1 group scheduling) -- absent; `MQ_IOSCHED_BFQ` from `defconfig`
+  is the only block scheduler extension that exists and it is not required.
+* `ANDROID_VSOC` -- VirtIO-over-socket transport of the Cuttlefish virtual
+  device; only needed by the emulator, not by real hardware.
+* `USB_CONFIGFS_F_MTP` / `USB_CONFIGFS_F_PTP` / `USB_F_MTP` / `USB_F_PTP`:
+  6.18 has no dedicated MTP function driver. MTP is a FunctionFS function
+  (`f_fs.c`), which is why `USB_CONFIGFS_F_FS` is mandatory and is enabled.
+
+`TASKSTATS` stays in `defconfig`; the Android Resource Manager uses it when
+present but it is not a boot blocker.
+
+## Non-config facts worth knowing
+
+* `ANDROID_BINDERFS` must stay **built in**. With `=n`, `binder.c` registers
+  `binder,hwbinder,vndbinder` as misc devices during init and refuses to
+  create the same names via binderfs, and `binderfs.c` is not compiled.
+* The binder misc device list is not hardened to a whitelist; an empty
+  `binder.devices=` (or `androidboot.binder_devices="")` therefore boots
+  cleanly with binderfs-only operation.
+* `binder_netlink` support (`BINDER_NETLINK_MESSAGE_REPLY`) is unconditionally
+  built into `binder.o`; libbinder degrades gracefully to binder transactions
+  when the generic netlink family is unavailable.
+* The out-of-tree `task_struct::android_vendor_data1` twin of
+  `android_vendor_data0` does not exist in 6.18. Userspace that needs it
+  must be built against the in-tree `struct task_struct` layout.
+* `/dev/ashmem` keeps the original ioctl ABI, including the 32-bit
+  `COMPAT_ASHMEM_SET_SIZE` translation, and purges pages through
+  `FALLOC_FL_PUNCH_HOLE` on a real shmem file.
