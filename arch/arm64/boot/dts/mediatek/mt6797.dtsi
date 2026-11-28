@@ -800,6 +800,45 @@
 		#clock-cells = <1>;
 	};
 
+	/*
+	 * Legacy SENINF CSI-2 receiver and CamSV DMA capture engines.
+	 * Stock MT6797 DTS: seninf0@1a040000, camsv00@1a050000 (SPI 252),
+	 * camsv01@1a051000 (SPI 253).
+	 */
+	camera: camera@1a040000 {
+		compatible = "mediatek,mt6797-camera";
+		reg = <0 0x1a040000 0 0x1000>;
+		reg-names = "seninf";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		status = "disabled";
+
+		camsv0: camsv@1a050000 {
+			compatible = "mediatek,cam-simple-engine";
+			reg = <0 0x1a050000 0 0x1000>;
+			cell-index = <0>;
+			interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_LOW>;
+
+			port {
+				camsv0_in: endpoint {
+				};
+			};
+		};
+
+		camsv1: camsv@1a051000 {
+			compatible = "mediatek,cam-simple-engine";
+			reg = <0 0x1a051000 0 0x1000>;
+			cell-index = <1>;
+			interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_LOW>;
+
+			port {
+				camsv1_in: endpoint {
+				};
+			};
+		};
+	};
+
 	vdecsys: syscon@16000000 {
 		compatible = "mediatek,mt6797-vdecsys", "syscon";
 		reg = <0 0x16000000 0 0x10000>;

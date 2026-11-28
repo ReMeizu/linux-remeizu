@@ -177,6 +177,7 @@ struct mtk_sensor {
 };
 
 int mtk_sensor_register(struct mtk_sensor *sensor, struct i2c_client *client);
+void mtk_sensor_unregister(struct i2c_client *client);
 int mtk_sensor_write16(struct mtk_sensor *sensor, u16 reg, u16 val);
 
 static inline struct mtk_sensor *to_mtk_sensor(struct v4l2_subdev *sd)

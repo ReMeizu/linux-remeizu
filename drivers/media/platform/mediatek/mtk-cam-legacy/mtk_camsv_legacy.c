@@ -63,41 +63,40 @@ static inline void camsv_write(struct mtk_camsv *camsv, u32 reg, u32 val)
 static struct mtk_seninf_port *mtk_camsv_get_port(struct mtk_camsv *camsv)
 {
 	struct mtk_cam_legacy *cam = camsv->cam;
-	struct fwnode_handle *ep;
 	unsigned int i;
 
 	for (i = 0; i < cam->num_ports; i++) {
 		struct mtk_seninf_port *port = &cam->ports[i];
+		struct fwnode_handle *ep, *remote, *port_parent;
+		u32 remote_idx = 0;
+		bool match = false;
 
-		fwnode_graph_for_each_endpoint(dev_fwnode(port->sd.dev), ep) {
-			struct fwnode_handle *remote, *port_parent;
-			u32 local_reg = 0, remote_reg = 0;
-			bool match = false;
+		ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(cam->dev),
+						     port->index, 1,
+						     FWNODE_GRAPH_DEVICE_DISABLED);
+		if (!ep)
+			continue;
 
-			/* Only the output endpoint (reg 1) links to an engine */
-			if (!fwnode_property_read_u32(ep, "reg", &local_reg) &&
-			    local_reg != 1)
-				continue;
+		remote = fwnode_graph_get_remote_endpoint(ep);
+		fwnode_handle_put(ep);
+		if (!remote)
+			continue;
 
-			remote = fwnode_graph_get_remote_endpoint(ep);
-			if (!remote)
-				continue;
-
-			port_parent = fwnode_graph_get_port_parent(remote);
-			if (port_parent) {
-				match = !fwnode_property_read_u32(port_parent,
-								  "reg",
-								  &remote_reg) &&
-					remote_reg == camsv->index;
-				fwnode_handle_put(port_parent);
-			}
-			fwnode_handle_put(remote);
-
-			if (match) {
-				fwnode_handle_put(ep);
-				return port;
-			}
+		port_parent = fwnode_graph_get_port_parent(remote);
+		fwnode_handle_put(remote);
+		if (port_parent) {
+			match = (!fwnode_property_read_u32(port_parent,
+							   "cell-index",
+							   &remote_idx) ||
+				 !fwnode_property_read_u32(port_parent,
+							   "reg",
+							   &remote_idx)) &&
+				remote_idx == camsv->index;
+			fwnode_handle_put(port_parent);
 		}
+
+		if (match)
+			return port;
 	}
 
 	return NULL;
@@ -665,7 +664,8 @@ static const struct v4l2_file_operations mtk_camsv_fops = {
 
 static int mtk_camsv_engine_probe(struct platform_device *pdev)
 {
-	struct mtk_camsv *camsv = dev_get_platdata(&pdev->dev);
+	struct mtk_camsv **camsvp = dev_get_platdata(&pdev->dev);
+	struct mtk_camsv *camsv = camsvp ? *camsvp : NULL;
 	struct device *dev = &pdev->dev;
 	int ret;
 
@@ -677,7 +677,7 @@ static int mtk_camsv_engine_probe(struct platform_device *pdev)
 	if (IS_ERR(camsv->base))
 		return PTR_ERR(camsv->base);
 
-	ret = device_property_read_u32(dev, "reg", &camsv->index);
+	ret = device_property_read_u32(dev, "cell-index", &camsv->index);
 	if (ret)
 		camsv->index = pdev->id;
 
@@ -764,6 +764,9 @@ int mtk_camsv_init(struct mtk_cam_legacy *cam)
 
 	n = 0;
 	fwnode_for_each_available_child_node_scoped(dev_fwnode(cam->dev), child) {
+		struct resource res[2];
+		unsigned int num_res = 0;
+		struct device_node *np = to_of_node(child);
 		struct platform_device_info pdevinfo = {
 			.parent = cam->dev,
 			.fwnode = child,
@@ -776,6 +779,15 @@ int mtk_camsv_init(struct mtk_cam_legacy *cam)
 		if (!fwnode_device_is_compatible(child,
 						 "mediatek,cam-simple-engine"))
 			continue;
+
+		if (np) {
+			if (!of_address_to_resource(np, 0, &res[num_res]))
+				num_res++;
+			if (of_irq_to_resource(np, 0, &res[num_res]) > 0)
+				num_res++;
+			pdevinfo.res = res;
+			pdevinfo.num_res = num_res;
+		}
 
 		camsv->cam = cam;
 
@@ -800,7 +812,8 @@ err_driver:
 	platform_driver_unregister(&mtk_camsv_engine_driver);
 
 	while (n--)
-		platform_device_unregister(to_platform_device(cam->camsv[n].dev));
+		if (cam->camsv[n].dev)
+			platform_device_unregister(to_platform_device(cam->camsv[n].dev));
 
 	return ret;
 }

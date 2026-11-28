@@ -1035,10 +1035,7 @@ static int s5k4h8_probe(struct i2c_client *client)
 
 static void s5k4h8_remove(struct i2c_client *client)
 {
-	struct v4l2_subdev *sd = i2c_get_clientdata(client);
-
-	v4l2_subdev_cleanup(sd);
-	media_entity_cleanup(&sd->entity);
+	mtk_sensor_unregister(client);
 }
 
 static const struct of_device_id s5k4h8_of_match[] = {

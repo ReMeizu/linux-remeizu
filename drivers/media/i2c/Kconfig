@@ -779,8 +779,6 @@ config VIDEO_VGXY61
 source "drivers/media/i2c/ccs/Kconfig"
 source "drivers/media/i2c/et8ek8/Kconfig"
 
-endif
-
 config VIDEO_S5K4H8
 	tristate "Samsung S5K4H8 sensor support"
 	depends on OF && GPIOLIB
@@ -800,9 +798,21 @@ config VIDEO_S5K5E8
 	  5 Mpix MIPI CSI-2 Bayer sensor, used as the secondary camera of the
 	  Meizu M5c (MT6737M) and Meizu M3 Note (MT6755).
 
+config VIDEO_OV5695
+	tristate "OmniVision OV5695 sensor support"
+	depends on OF && GPIOLIB
+	select VIDEO_MTK_SENSOR_LEGACY
+	help
+	  This is a Video4Linux2 sensor-level driver for the OmniVision
+	  OV5695 5 Mpix MIPI CSI-2 Bayer sensor, used as the front camera of
+	  the Meizu MX6 (MT6797) and Meizu M3 Note (MT6755).
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called ov5695.
+
 config VIDEO_OV13853
 	tristate "OmniVision OV13853 sensor support"
-	depends on VIDEO_DEV && I2C
+	depends on OF && GPIOLIB
 	select VIDEO_MTK_SENSOR_LEGACY
 	help
 	  This is a Video4Linux2 sensor-level driver for the OmniVision
@@ -820,6 +830,8 @@ config VIDEO_IMX386
 	  12 Mpix MIPI CSI-2 Bayer sensor, the rear camera of the Meizu MX6
 	  (MT6797).  The register sequences are derived from the MediaTek
 	  vendor image sensor driver of that device.
+
+endif
 
 menu "Camera ISPs"
 	visible if MEDIA_CAMERA_SUPPORT

@@ -183,8 +183,64 @@
 	status = "okay";
 };
 
+&i2c0 {
+	status = "okay";
+
+	/*
+	 * Rear camera: Samsung S5K4H8 (8 Mpix, 4-lane CSI-2) at 0x10 on i2c0.
+	 * Stock pins: CMRST = GPIO44, CMPDN = GPIO7.
+	 */
+	camera_rear: camera@10 {
+		compatible = "samsung,s5k4h8";
+		reg = <0x10>;
+		avdd-supply = <&mt6328_vcama_reg>;
+		dovdd-supply = <&mt6328_vcam_io_reg>;
+		dvdd-supply = <&mt6328_vcamd_reg>;
+		reset-gpios = <&pio 44 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&pio 7 GPIO_ACTIVE_LOW>;
+
+		port {
+			s5k4h8_out: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&seninf_in0>;
+			};
+		};
+	};
+
+	/*
+	 * Front camera: Samsung S5K5E8 (5 Mpix, 2-lane CSI-2) at 0x3c on i2c0.
+	 * Stock pins: CMRST1 = GPIO11, CMPDN1 = GPIO12.
+	 */
+	camera_front: camera@3c {
+		compatible = "samsung,s5k5e8";
+		reg = <0x3c>;
+		avdd-supply = <&mt6328_vcama_reg>;
+		dovdd-supply = <&mt6328_vcam_io_reg>;
+		dvdd-supply = <&mt6328_vcamd_reg>;
+		reset-gpios = <&pio 11 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&pio 12 GPIO_ACTIVE_LOW>;
+
+		port {
+			s5k5e8_out: endpoint {
+				data-lanes = <1 2>;
+				remote-endpoint = <&seninf_in1>;
+			};
+		};
+	};
+};
+
 &i2c1 {
 	status = "okay";
+
+	/*
+	 * Rear camera flash controller (stock strobe_main@63 on i2c1,
+	 * hardware enable on GPIO9).
+	 */
+	flash@63 {
+		compatible = "ti,lm3644", "mediatek,strobe_main";
+		reg = <0x63>;
+		enable-gpios = <&pio 9 GPIO_ACTIVE_HIGH>;
+	};
 
 	/*
 	 * TPS65132 bias.  Vendor: i2c1 0x3e, ENP GPIO64, ENN GPIO63, both
@@ -278,4 +334,55 @@
 
 &usb2phy {
 	status = "okay";
+};
+
+&camera {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			seninf_in0: endpoint@0 {
+				reg = <0>;
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&s5k4h8_out>;
+			};
+
+			seninf_out0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&camsv0_in>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			seninf_in1: endpoint@0 {
+				reg = <0>;
+				data-lanes = <1 2>;
+				remote-endpoint = <&s5k5e8_out>;
+			};
+
+			seninf_out1: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&camsv1_in>;
+			};
+		};
+	};
+};
+
+&camsv0_in {
+	remote-endpoint = <&seninf_out0>;
+};
+
+&camsv1_in {
+	remote-endpoint = <&seninf_out1>;
 };

@@ -100,13 +100,20 @@
 #define LM3644_TORCH_MIN_UA	LM3644_TORCH_UA_PER_STEP
 #define LM3644_FLASH_MIN_UA	LM3644_FLASH_UA_PER_STEP
 
+struct lm3644;
+
+struct lm3644_led {
+	struct lm3644 *priv;
+	struct led_classdev_flash fled;
+	bool is_led1;
+};
+
 /**
  * struct lm3644 - one LM3644/LM3643 instance
  * @dev: I2C client device
  * @regmap: register map
  * @lock: serialises the register accesses and the cached state
- * @flash1: LED1 (cool white) flash LED class device
- * @flash2: LED2 (warm white) flash LED class device
+ * @leds: LED1 (cool white) and LED2 (warm white) flash LED class devices
  * @hw_en: hardware EN pin, active high, may be NULL
  * @enable: cached enable register value
  * @timeout_reg: register holding the flash safety timeout
@@ -117,8 +124,7 @@ struct lm3644 {
 	struct device *dev;
 	struct regmap *regmap;
 	struct mutex lock;
-	struct led_classdev_flash flash1;
-	struct led_classdev_flash flash2;
+	struct lm3644_led leds[2];
 	struct gpio_desc *hw_en;
 	unsigned int enable;
 	unsigned int timeout_reg;
@@ -126,9 +132,9 @@ struct lm3644 {
 	unsigned int timeout_max;
 };
 
-static struct lm3644 *flash_to_lm3644(struct led_classdev_flash *fled)
+static struct lm3644_led *flash_to_lm3644_led(struct led_classdev_flash *fled)
 {
-	return container_of(fled, struct lm3644, flash1);
+	return container_of(fled, struct lm3644_led, fled);
 }
 
 static int lm3644_update_enable(struct lm3644 *priv, unsigned int set,
@@ -157,8 +163,9 @@ static int lm3644_led_set(struct led_classdev *led_cdev,
 			  enum led_brightness brightness)
 {
 	struct led_classdev_flash *fled = lcdev_to_flcdev(led_cdev);
-	struct lm3644 *priv = flash_to_lm3644(fled);
-	bool is_led1 = fled == &priv->flash1;
+	struct lm3644_led *led = flash_to_lm3644_led(fled);
+	struct lm3644 *priv = led->priv;
+	bool is_led1 = led->is_led1;
 	unsigned int torch_reg = is_led1 ? LM3644_REG_TORCH_LED1 :
 					   LM3644_REG_TORCH_LED2;
 	unsigned int en_bit = is_led1 ? LM3644_EN_LED1 : LM3644_EN_LED2;
@@ -183,8 +190,9 @@ static int lm3644_led_set(struct led_classdev *led_cdev,
 static int lm3644_flash_brightness_set(struct led_classdev_flash *fled,
 				       u32 brightness_ua)
 {
-	struct lm3644 *priv = flash_to_lm3644(fled);
-	bool is_led1 = fled == &priv->flash1;
+	struct lm3644_led *led = flash_to_lm3644_led(fled);
+	struct lm3644 *priv = led->priv;
+	bool is_led1 = led->is_led1;
 	unsigned int reg = is_led1 ? LM3644_REG_FLASH_LED1 :
 				     LM3644_REG_FLASH_LED2;
 	unsigned int code;
@@ -200,8 +208,9 @@ static int lm3644_flash_brightness_set(struct led_classdev_flash *fled,
 static int lm3644_flash_brightness_get(struct led_classdev_flash *fled,
 				       u32 *brightness_ua)
 {
-	struct lm3644 *priv = flash_to_lm3644(fled);
-	bool is_led1 = fled == &priv->flash1;
+	struct lm3644_led *led = flash_to_lm3644_led(fled);
+	struct lm3644 *priv = led->priv;
+	bool is_led1 = led->is_led1;
 	unsigned int reg = is_led1 ? LM3644_REG_FLASH_LED1 :
 				     LM3644_REG_FLASH_LED2;
 	unsigned int val;
@@ -220,8 +229,9 @@ static int lm3644_flash_brightness_get(struct led_classdev_flash *fled,
 
 static int lm3644_strobe_set(struct led_classdev_flash *fled, bool state)
 {
-	struct lm3644 *priv = flash_to_lm3644(fled);
-	bool is_led1 = fled == &priv->flash1;
+	struct lm3644_led *led = flash_to_lm3644_led(fled);
+	struct lm3644 *priv = led->priv;
+	bool is_led1 = led->is_led1;
 	unsigned int en_bit = is_led1 ? LM3644_EN_LED1 : LM3644_EN_LED2;
 	unsigned int torch_bit = is_led1 ? LM3644_EN_TORCH_LED1 :
 					   LM3644_EN_TORCH_LED2;
@@ -238,8 +248,9 @@ static int lm3644_strobe_set(struct led_classdev_flash *fled, bool state)
 
 static int lm3644_strobe_get(struct led_classdev_flash *fled, bool *state)
 {
-	struct lm3644 *priv = flash_to_lm3644(fled);
-	bool is_led1 = fled == &priv->flash1;
+	struct lm3644_led *led = flash_to_lm3644_led(fled);
+	struct lm3644 *priv = led->priv;
+	bool is_led1 = led->is_led1;
 	unsigned int en_bit = is_led1 ? LM3644_EN_LED1 : LM3644_EN_LED2;
 	unsigned int torch_bit = is_led1 ? LM3644_EN_TORCH_LED1 :
 					   LM3644_EN_TORCH_LED2;
@@ -253,7 +264,7 @@ static int lm3644_strobe_get(struct led_classdev_flash *fled, bool *state)
 
 static int lm3644_timeout_set(struct led_classdev_flash *fled, u32 timeout_us)
 {
-	struct lm3644 *priv = flash_to_lm3644(fled);
+	struct lm3644 *priv = flash_to_lm3644_led(fled)->priv;
 	unsigned int code;
 	int ret;
 
@@ -282,7 +293,7 @@ static int lm3644_duration_set(struct led_classdev_flash *fled,
 
 static int lm3644_fault_get(struct led_classdev_flash *fled, u32 *fault)
 {
-	struct lm3644 *priv = flash_to_lm3644(fled);
+	struct lm3644 *priv = flash_to_lm3644_led(fled)->priv;
 	unsigned int val;
 	int ret;
 
@@ -376,18 +387,23 @@ static int lm3644_register_leds(struct lm3644 *priv)
 		current_ua = min(current_ua, (u32)LM3644_FLASH_MAX_UA);
 	max_ua = min(current_ua, (u32)LM3644_FLASH_MAX_UA);
 
-	lm3644_init_flash(priv, &priv->flash1, "white:flash", max_ua);
-	lm3644_init_flash(priv, &priv->flash2, "yellow:flash", max_ua);
+	priv->leds[0].priv = priv;
+	priv->leds[0].is_led1 = true;
+	priv->leds[1].priv = priv;
+	priv->leds[1].is_led1 = false;
+
+	lm3644_init_flash(priv, &priv->leds[0].fled, "white:flash", max_ua);
+	lm3644_init_flash(priv, &priv->leds[1].fled, "yellow:flash", max_ua);
 
 	init_data.devicename = "lm3644";
 	init_data.default_label = "white:flash";
-	ret = devm_led_classdev_flash_register_ext(dev, &priv->flash1,
+	ret = devm_led_classdev_flash_register_ext(dev, &priv->leds[0].fled,
 						   &init_data);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to register LED1\n");
 
 	init_data.default_label = "yellow:flash";
-	ret = devm_led_classdev_flash_register_ext(dev, &priv->flash2,
+	ret = devm_led_classdev_flash_register_ext(dev, &priv->leds[1].fled,
 						   &init_data);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to register LED2\n");

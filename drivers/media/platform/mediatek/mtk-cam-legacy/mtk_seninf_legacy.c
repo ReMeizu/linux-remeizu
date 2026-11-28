@@ -415,9 +415,14 @@ static int mtk_seninf_register_port(struct mtk_cam_legacy *cam,
  */
 int mtk_seninf_init(struct mtk_cam_legacy *cam)
 {
+	struct fwnode_handle *ports_node;
 	unsigned int n = 0;
 
-	fwnode_for_each_child_node_scoped(dev_fwnode(cam->dev), child) {
+	ports_node = fwnode_get_named_child_node(dev_fwnode(cam->dev), "ports");
+	if (!ports_node)
+		ports_node = fwnode_handle_get(dev_fwnode(cam->dev));
+
+	fwnode_for_each_child_node_scoped(ports_node, child) {
 		u32 reg;
 
 		if (!fwnode_name_eq(child, "port"))
@@ -432,15 +437,19 @@ int mtk_seninf_init(struct mtk_cam_legacy *cam)
 		n++;
 	}
 
-	if (!n)
+	if (!n) {
+		fwnode_handle_put(ports_node);
 		return 0;
+	}
 
 	cam->ports = devm_kcalloc(cam->dev, n, sizeof(*cam->ports), GFP_KERNEL);
-	if (!cam->ports)
+	if (!cam->ports) {
+		fwnode_handle_put(ports_node);
 		return -ENOMEM;
+	}
 
 	n = 0;
-	fwnode_for_each_child_node_scoped(dev_fwnode(cam->dev), child) {
+	fwnode_for_each_child_node_scoped(ports_node, child) {
 		struct mtk_seninf_port *port = &cam->ports[n];
 		int ret;
 
@@ -451,17 +460,22 @@ int mtk_seninf_init(struct mtk_cam_legacy *cam)
 		mutex_init(&port->lock);
 
 		ret = mtk_seninf_parse_port(cam, port, child);
-		if (ret)
+		if (ret) {
+			fwnode_handle_put(ports_node);
 			return ret;
+		}
 
 		ret = mtk_seninf_register_port(cam, port);
-		if (ret)
+		if (ret) {
+			fwnode_handle_put(ports_node);
 			return ret;
+		}
 
 		cam->pads += ARRAY_SIZE(port->pads);
 		n++;
 	}
 
+	fwnode_handle_put(ports_node);
 	cam->num_ports = n;
 
 	return 0;

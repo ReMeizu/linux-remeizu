@@ -432,6 +432,100 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c2_pins>;
 	status = "okay";
+
+	/*
+	 * Rear camera: OmniVision OV13853 (13 Mpix, 2-lane CSI-2) at 0x10.
+	 * Stock pins: cam0_rst = GPIO110, cam0_pnd = GPIO107.
+	 */
+	camera_rear: camera@10 {
+		compatible = "ovti,ov13853";
+		reg = <0x10>;
+		avdd-supply = <&mt6351_vcama>;
+		dovdd-supply = <&mt6351_vcamio>;
+		dvdd-supply = <&mt6351_vcamd>;
+		reset-gpios = <&pio 110 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&pio 107 GPIO_ACTIVE_LOW>;
+
+		port {
+			ov13853_out: endpoint {
+				data-lanes = <1 2>;
+				remote-endpoint = <&seninf_in0>;
+			};
+		};
+	};
+
+	/*
+	 * Front camera: OmniVision OV5695 (5 Mpix, 2-lane CSI-2) at 0x36.
+	 * Stock pins: cam1_rst = GPIO111, cam1_pnd = GPIO108, 24 MHz MCLK.
+	 */
+	camera_front: camera@36 {
+		compatible = "ovti,ov5695";
+		reg = <0x36>;
+		clock-frequency = <24000000>;
+		avdd-supply = <&mt6351_vcama>;
+		dovdd-supply = <&mt6351_vcamio>;
+		dvdd-supply = <&mt6351_vcamd>;
+		reset-gpios = <&pio 111 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&pio 108 GPIO_ACTIVE_LOW>;
+
+		port {
+			ov5695_out: endpoint {
+				data-lanes = <1 2>;
+				remote-endpoint = <&seninf_in1>;
+			};
+		};
+	};
+};
+
+&camera {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			seninf_in0: endpoint@0 {
+				reg = <0>;
+				data-lanes = <1 2>;
+				remote-endpoint = <&ov13853_out>;
+			};
+
+			seninf_out0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&camsv0_in>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			seninf_in1: endpoint@0 {
+				reg = <0>;
+				data-lanes = <1 2>;
+				remote-endpoint = <&ov5695_out>;
+			};
+
+			seninf_out1: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&camsv1_in>;
+			};
+		};
+	};
+};
+
+&camsv0_in {
+	remote-endpoint = <&seninf_out0>;
+};
+
+&camsv1_in {
+	remote-endpoint = <&seninf_out1>;
 };
 
 &i2c3 {

@@ -63,7 +63,7 @@ static bool mtk_cam_legacy_graph_is_complete(struct mtk_cam_legacy *cam)
 
 		if (!port->sensor_sd)
 			return false;
-		if (!port->camsv || !video_is_registered(&port->camsv->vdev))
+		if (!port->camsv)
 			return false;
 	}
 
@@ -110,7 +110,7 @@ static int mtk_cam_legacy_build_graph(struct mtk_cam_legacy *cam)
 		if (ret) {
 			dev_err(cam->dev, "failed to link seninf-%u: %d\n",
 				port->index, ret);
-			return ret;
+			goto err_media;
 		}
 
 		if (!port->camsv) {
@@ -125,7 +125,7 @@ static int mtk_cam_legacy_build_graph(struct mtk_cam_legacy *cam)
 					    MEDIA_LNK_FL_IMMUTABLE);
 		if (ret) {
 			dev_err(cam->dev, "failed to link camsv: %d\n", ret);
-			return ret;
+			goto err_media;
 		}
 	}
 
@@ -165,17 +165,13 @@ mtk_cam_legacy_port_for_sensor(struct mtk_cam_legacy *cam,
 		u32 reg = 0;
 
 		remote = fwnode_graph_get_remote_endpoint(ep);
-		if (!remote) {
-			fwnode_handle_put(ep);
+		if (!remote)
 			continue;
-		}
 
-		port_node = fwnode_graph_get_port_parent(remote);
+		port_node = fwnode_get_parent(remote);
 		fwnode_handle_put(remote);
-		if (!port_node) {
-			fwnode_handle_put(ep);
+		if (!port_node)
 			continue;
-		}
 
 		fwnode_property_read_u32(port_node, "reg", &reg);
 		fwnode_handle_put(port_node);
@@ -187,10 +183,10 @@ mtk_cam_legacy_port_for_sensor(struct mtk_cam_legacy *cam,
 			}
 		}
 
-		fwnode_handle_put(ep);
-
-		if (port && !port->sensor_sd)
+		if (port && !port->sensor_sd) {
+			fwnode_handle_put(ep);
 			return port;
+		}
 	}
 
 	return NULL;
@@ -334,18 +330,20 @@ static int mtk_cam_legacy_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_seninf;
 
-	cam->sensors = devm_kcalloc(dev, cam->num_ports,
-				    sizeof(*cam->sensors), GFP_KERNEL);
-	if (!cam->sensors) {
-		ret = -ENOMEM;
-		goto err_camsv;
+	if (cam->num_ports) {
+		cam->sensors = devm_kcalloc(dev, cam->num_ports,
+					    sizeof(*cam->sensors), GFP_KERNEL);
+		if (!cam->sensors) {
+			ret = -ENOMEM;
+			goto err_camsv;
+		}
 	}
+
+	platform_set_drvdata(pdev, cam);
 
 	ret = mtk_cam_legacy_register_sensors(cam);
 	if (ret)
 		goto err_camsv;
-
-	platform_set_drvdata(pdev, cam);
 
 	dev_info(dev, "%s camera subsystem: %u seninf ports, %u CamSV engines\n",
 		 cam->soc->name, cam->num_ports, cam->num_camsv);

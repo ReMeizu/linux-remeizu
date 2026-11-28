@@ -24,6 +24,7 @@
 #include <linux/regulator/consumer.h>
 
 #include <media/media-entity.h>
+#include <media/v4l2-async.h>
 #include <media/v4l2-cci.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-fwnode.h>
@@ -589,13 +590,16 @@ static int mtk_sensor_init_regmap(struct mtk_sensor *sensor,
 
 static int mtk_sensor_identify(struct mtk_sensor *sensor)
 {
+	u32 reg;
 	u64 id;
 	int ret;
 
-	if (!sensor->id_reg || !sensor->id_val)
+	if (!sensor->id_val)
 		return 0;
 
-	ret = cci_read(sensor->regmap, SENSOR_REG(sensor->id_reg), &id, NULL);
+	reg = sensor->id_val > 0xff ? CCI_REG16(sensor->id_reg) :
+				      SENSOR_REG(sensor->id_reg);
+	ret = cci_read(sensor->regmap, reg, &id, NULL);
 	if (ret) {
 		dev_err(sensor->dev, "failed to read ID: %d\n", ret);
 		return ret;
@@ -698,12 +702,18 @@ int mtk_sensor_register(struct mtk_sensor *sensor, struct i2c_client *client)
 	if (ret)
 		goto err_ctrls;
 
+	ret = v4l2_async_register_subdev_sensor(&sensor->sd);
+	if (ret)
+		goto err_subdev;
+
 	dev_info(dev, "%s (%s) registered, default %ux%u@%ufps\n",
 		 sensor->name, dev_name(dev), sensor->modes[0].width,
 		 sensor->modes[0].height, MTK_SENSOR_DEFAULT_FPS);
 
 	return 0;
 
+err_subdev:
+	v4l2_subdev_cleanup(&sensor->sd);
 err_ctrls:
 	v4l2_ctrl_handler_free(&sensor->ctrls);
 err_entity:
@@ -713,3 +723,16 @@ err_power:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mtk_sensor_register);
+
+void mtk_sensor_unregister(struct i2c_client *client)
+{
+	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	struct mtk_sensor *sensor = to_mtk_sensor(sd);
+
+	v4l2_async_unregister_subdev(sd);
+	v4l2_subdev_cleanup(sd);
+	media_entity_cleanup(&sd->entity);
+	v4l2_ctrl_handler_free(&sensor->ctrls);
+	mtk_sensor_power_off(sensor);
+}
+EXPORT_SYMBOL_GPL(mtk_sensor_unregister);
