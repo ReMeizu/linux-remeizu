@@ -144,4 +144,18 @@ config LEDS_TPS6131X
 
 	  This driver can be built as a module, it will be called "leds-tps6131x".
 
+config LEDS_LM3644
+	tristate "LED support for TI LM3644 flash controller"
+	depends on LEDS_CLASS_FLASH
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This option enables support for the Texas Instruments LM3644 dual
+	  channel flash LED controller.  It exposes both current sinks as
+	  flash LED class devices supporting torch and strobe modes, which is
+	  how the Meizu MX6 (MT6797) drives its dual-tone camera flash.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called leds-lm3644.
+
 endif # LEDS_CLASS_FLASH
